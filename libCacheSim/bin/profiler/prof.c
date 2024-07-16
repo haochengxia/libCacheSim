@@ -111,6 +111,20 @@ void profile(reader_t *reader, cache_t *cache, int report_interval,
   srand(time(NULL));
   set_rand_seed(rand());
 
+  uint64_t n_total_req = -1;
+  if (reader->is_zstd_file) {
+    n_total_req = 0;
+    request_t *req = new_request();
+    read_one_req(reader, req);
+    while (req->valid) {
+      n_total_req++;
+      read_one_req(reader, req);
+    }
+    reset_reader(reader);
+  } else {
+    n_total_req = reader->n_total_req;
+  }
+
   request_t *req = new_request();
   uint64_t req_cnt = 0, miss_cnt = 0;
   uint64_t last_req_cnt = 0, last_miss_cnt = 0;
@@ -144,7 +158,7 @@ void profile(reader_t *reader, cache_t *cache, int report_interval,
     // according to the current req counter, determine data need to be record to which time window
 
     // if (cache->get(cache, req) == false) {
-    double current_percentage = ((double )req_cnt) / (double)(reader->n_total_req);
+    double current_percentage = ((double )req_cnt) / (double)(n_total_req);
     int w1 = -1;
     int w2 = -1;
 
@@ -204,17 +218,17 @@ void profile(reader_t *reader, cache_t *cache, int report_interval,
   }
 
   printf(
-           "GLOBAL  \t main hits %16lld, fifo hits %16lld, ghost hits %16lld, "
-           "admit main %16lld, admit fifo %16lld, move main %16lld, "
-           "total reqs %16lld\n",
+           "GLOBAL,   main hits %8ld, fifo hits %8ld, ghost hits %8ld, "
+           "admit main %8ld, admit fifo %8ld, move main %8ld, "
+           "total reqs %8ld\n",
            stats.main_hits, stats.fifo_hits, stats.ghost_hits,
            stats.n_obj_admit_to_main, stats.n_obj_admit_to_fifo, stats.n_obj_move_to_main,
-           reader->n_total_req);
+           n_total_req);
 
   for (int i = 0; i < num_window; i++) {
     printf(
-             "WINDOW %d\t main hits %16lld, fifo hits %16lld, ghost hits %16lld, "
-             "admit main %16lld, admit fifo %16lld, move main %16lld, "
+             "WINDOW %d, main hits %8ld, fifo hits %8ld, ghost hits %8ld, "
+             "admit main %8ld, admit fifo %8ld, move main %8ld, "
              "\n",
              i, window_stats[i].main_hits, window_stats[i].fifo_hits, window_stats[i].ghost_hits,
              window_stats[i].n_obj_admit_to_main, window_stats[i].n_obj_admit_to_fifo, window_stats[i].n_obj_move_to_main);
@@ -222,11 +236,11 @@ void profile(reader_t *reader, cache_t *cache, int report_interval,
 
   S3FIFO_params_t* params = (S3FIFO_params_t*)(cache->eviction_params);
   printf(
-      "VALIDATE  \t"
-      "admit main %16lld, admit fifo %16lld, move main %16lld, "
-      "total reqs %16lld, req_cnt %16lld\n",
+      "VALIDATE,  "
+      "admit main %8ld, admit fifo %8ld, move main %8ld, "
+      "total reqs %8ld, req_cnt %8ld\n",
       params->n_obj_admit_to_main, params->n_obj_admit_to_fifo, params->n_obj_move_to_main,
-      reader->n_total_req, req_cnt);
+      n_total_req, req_cnt);
 
 #pragma GCC diagnostic pop
   printf("%s", output_str);

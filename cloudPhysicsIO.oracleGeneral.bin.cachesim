@@ -48,3 +48,7 @@ WINDOW 18	 main hits ratio            18842, fifo hits             9339, ghost h
 
 ./data/cloudPhysicsIO.oracleGeneral.bin S3FIFO-0.0100-2 cache size     4897,           113872 req, miss ratio 0.7525, throughput 2.59 MQPS
 
+./data/cloudPhysicsIO.oracleGeneral.bin S3FIFO-0.1000-2 cache size     4897,           113872 req, miss ratio 0.7525, throughput 0.63 MQPS
+
+./data/cloudPhysicsIO.oracleGeneral.bin S3FIFO-0.1000-2 cache size     4897,           113872 req, miss ratio 0.7525, throughput 1.87 MQPS
+
