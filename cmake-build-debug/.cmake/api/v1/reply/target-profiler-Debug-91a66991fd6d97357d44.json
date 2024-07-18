@@ -1,0 +1,204 @@
+{
+	"archive" : {},
+	"artifacts" : 
+	[
+		{
+			"path" : "libCacheSim/profiler/libprofiler.a"
+		}
+	],
+	"backtrace" : 1,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_library",
+			"target_link_libraries",
+			"add_compile_definitions",
+			"add_definitions",
+			"include_directories"
+		],
+		"files" : 
+		[
+			"libCacheSim/profiler/CMakeLists.txt",
+			"CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 2,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 3,
+				"parent" : 0
+			},
+			{
+				"file" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 3
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 89,
+				"parent" : 3
+			},
+			{
+				"command" : 3,
+				"file" : 1,
+				"line" : 36,
+				"parent" : 3
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 151,
+				"parent" : 3
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 70,
+				"parent" : 3
+			},
+			{
+				"command" : 4,
+				"file" : 1,
+				"line" : 142,
+				"parent" : 3
+			},
+			{
+				"command" : 4,
+				"file" : 1,
+				"line" : 147,
+				"parent" : 3
+			},
+			{
+				"command" : 4,
+				"file" : 1,
+				"line" : 248,
+				"parent" : 3
+			}
+		]
+	},
+	"compileGroups" : 
+	[
+		{
+			"compileCommandFragments" : 
+			[
+				{
+					"fragment" : "   -Wall -Wshadow -Winline -Wno-unused -Wstrict-prototypes -Wmissing-declarations -Wredundant-decls -fno-strict-aliasing  -g -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX11.1.sdk -fcolor-diagnostics"
+				}
+			],
+			"defines" : 
+			[
+				{
+					"backtrace" : 4,
+					"define" : "INCLUDE_PRIV=1"
+				},
+				{
+					"backtrace" : 5,
+					"define" : "LOGLEVEL=6"
+				},
+				{
+					"backtrace" : 6,
+					"define" : "OS_DARWIN"
+				},
+				{
+					"backtrace" : 7,
+					"define" : "SUPPORT_ZSTD_TRACE=1"
+				},
+				{
+					"backtrace" : 8,
+					"define" : "USE_HUGEPAGE=1"
+				}
+			],
+			"includes" : 
+			[
+				{
+					"backtrace" : 9,
+					"path" : "/usr/local/Cellar/glib/2.70.2/include/glib-2.0"
+				},
+				{
+					"backtrace" : 9,
+					"path" : "/usr/local/Cellar/glib/2.70.2/lib/glib-2.0/include"
+				},
+				{
+					"backtrace" : 10,
+					"path" : "/usr/local/include"
+				},
+				{
+					"backtrace" : 11,
+					"path" : "/Users/percy/CLionProjects/libCacheSim/include"
+				}
+			],
+			"language" : "C",
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2
+			]
+		}
+	],
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 2,
+			"id" : "traceReader::@ec2a3a343b13125ed846"
+		}
+	],
+	"id" : "profiler::@11321c997826885bf002",
+	"name" : "profiler",
+	"nameOnDisk" : "libprofiler.a",
+	"paths" : 
+	{
+		"build" : "libCacheSim/profiler",
+		"source" : "libCacheSim/profiler"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "Source Files",
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "libCacheSim/profiler/dist.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "libCacheSim/profiler/profilerLRU.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "libCacheSim/profiler/simulator.c",
+			"sourceGroupIndex" : 0
+		}
+	],
+	"type" : "STATIC_LIBRARY"
+}

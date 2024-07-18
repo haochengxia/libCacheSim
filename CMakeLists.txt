@@ -341,7 +341,8 @@ file(GLOB utils_source
         ${PROJECT_SOURCE_DIR}/libCacheSim/utils/*.c
     )
     
-set(LIB_SOURCE ${LIB_SOURCE} ${cache_source} ${reader_source} ${dataStructure_source} ${profiler_source} ${utils_source})
+set(LIB_SOURCE ${LIB_SOURCE} ${cache_source} ${reader_source} ${dataStructure_source} ${profiler_source} ${utils_source}
+        libCacheSim/bin/profiler/prof.c)
 
 ###################
 # # https://stackoverflow.com/questions/32469953/why-is-cmake-designed-so-that-it-removes-runtime-path-when-installing

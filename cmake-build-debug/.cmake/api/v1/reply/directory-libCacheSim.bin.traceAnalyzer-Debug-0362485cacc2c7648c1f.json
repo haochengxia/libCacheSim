@@ -1,0 +1,45 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"libCacheSim/bin/traceAnalyzer/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 4,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "bin",
+			"paths" : 
+			[
+				"bin/traceAnalyzer"
+			],
+			"targetId" : "traceAnalyzer::@37237c3e61582a33bda9",
+			"targetIndex" : 50,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "libCacheSim/bin/traceAnalyzer",
+		"source" : "libCacheSim/bin/traceAnalyzer"
+	}
+}

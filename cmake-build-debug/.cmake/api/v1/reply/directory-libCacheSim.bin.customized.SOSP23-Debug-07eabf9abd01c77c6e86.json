@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "libCacheSim/bin/customized/SOSP23",
+		"source" : "libCacheSim/bin/customized/SOSP23"
+	}
+}

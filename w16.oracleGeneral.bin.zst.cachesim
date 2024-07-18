@@ -1,0 +1,4 @@
+./data/w16.oracleGeneral.bin.zst S3FIFO-0.1000-2 cache size   814383,         26702188 req, miss ratio 0.7130, throughput 1.96 MQPS
+
+./data/w16.oracleGeneral.bin.zst S3FIFO-0.1000-2 cache size   814383,         26702188 req, miss ratio 0.7130, throughput 2.00 MQPS
+

@@ -1,0 +1,269 @@
+{
+	"archive" : {},
+	"artifacts" : 
+	[
+		{
+			"path" : "libCacheSim/cache/eviction/libevictionCPP.a"
+		}
+	],
+	"backtrace" : 1,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_library",
+			"target_link_libraries",
+			"add_compile_definitions",
+			"add_definitions",
+			"include_directories",
+			"set_target_properties"
+		],
+		"files" : 
+		[
+			"libCacheSim/cache/eviction/CMakeLists.txt",
+			"CMakeLists.txt",
+			"libCacheSim/cache/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 108,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 109,
+				"parent" : 0
+			},
+			{
+				"file" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 76,
+				"parent" : 3
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 89,
+				"parent" : 3
+			},
+			{
+				"command" : 3,
+				"file" : 1,
+				"line" : 36,
+				"parent" : 3
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 151,
+				"parent" : 3
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 70,
+				"parent" : 3
+			},
+			{
+				"command" : 4,
+				"file" : 1,
+				"line" : 142,
+				"parent" : 3
+			},
+			{
+				"command" : 4,
+				"file" : 1,
+				"line" : 147,
+				"parent" : 3
+			},
+			{
+				"command" : 4,
+				"file" : 1,
+				"line" : 248,
+				"parent" : 3
+			},
+			{
+				"file" : 2
+			},
+			{
+				"command" : 4,
+				"file" : 2,
+				"line" : 2,
+				"parent" : 12
+			},
+			{
+				"command" : 4,
+				"file" : 2,
+				"line" : 3,
+				"parent" : 12
+			},
+			{
+				"command" : 4,
+				"file" : 2,
+				"line" : 4,
+				"parent" : 12
+			},
+			{
+				"command" : 5,
+				"file" : 0,
+				"line" : 110,
+				"parent" : 0
+			}
+		]
+	},
+	"compileGroups" : 
+	[
+		{
+			"compileCommandFragments" : 
+			[
+				{
+					"fragment" : "-g -std=c++17 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX11.1.sdk -fcolor-diagnostics"
+				}
+			],
+			"defines" : 
+			[
+				{
+					"backtrace" : 4,
+					"define" : "INCLUDE_PRIV=1"
+				},
+				{
+					"backtrace" : 5,
+					"define" : "LOGLEVEL=6"
+				},
+				{
+					"backtrace" : 6,
+					"define" : "OS_DARWIN"
+				},
+				{
+					"backtrace" : 7,
+					"define" : "SUPPORT_ZSTD_TRACE=1"
+				},
+				{
+					"backtrace" : 8,
+					"define" : "USE_HUGEPAGE=1"
+				}
+			],
+			"includes" : 
+			[
+				{
+					"backtrace" : 9,
+					"path" : "/usr/local/Cellar/glib/2.70.2/include/glib-2.0"
+				},
+				{
+					"backtrace" : 9,
+					"path" : "/usr/local/Cellar/glib/2.70.2/lib/glib-2.0/include"
+				},
+				{
+					"backtrace" : 10,
+					"path" : "/usr/local/include"
+				},
+				{
+					"backtrace" : 11,
+					"path" : "/Users/percy/CLionProjects/libCacheSim/include"
+				},
+				{
+					"backtrace" : 13,
+					"path" : "/Users/percy/CLionProjects/libCacheSim/libCacheSim/cache/admission"
+				},
+				{
+					"backtrace" : 14,
+					"path" : "/Users/percy/CLionProjects/libCacheSim/libCacheSim/cache/eviction"
+				},
+				{
+					"backtrace" : 15,
+					"path" : "/Users/percy/CLionProjects/libCacheSim/libCacheSim/cache/prefetch"
+				}
+			],
+			"language" : "CXX",
+			"languageStandard" : 
+			{
+				"backtraces" : 
+				[
+					16
+				],
+				"standard" : "17"
+			},
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2,
+				3
+			]
+		}
+	],
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 2,
+			"id" : "utils::@062a48a72ea1c79af91e"
+		},
+		{
+			"backtrace" : 2,
+			"id" : "cachelib::@166d0684602266569bed"
+		},
+		{
+			"backtrace" : 2,
+			"id" : "dataStructure::@7ee960a11d1e390c18b1"
+		}
+	],
+	"id" : "evictionCPP::@14d489523b2c3395d605",
+	"name" : "evictionCPP",
+	"nameOnDisk" : "libevictionCPP.a",
+	"paths" : 
+	{
+		"build" : "libCacheSim/cache/eviction",
+		"source" : "libCacheSim/cache/eviction"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "Source Files",
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2,
+				3
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "libCacheSim/cache/eviction/cpp/LFU.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "libCacheSim/cache/eviction/cpp/GDSF.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "libCacheSim/cache/eviction/LHD/lhd.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "libCacheSim/cache/eviction/LHD/LHD_Interface.cpp",
+			"sourceGroupIndex" : 0
+		}
+	],
+	"type" : "STATIC_LIBRARY"
+}

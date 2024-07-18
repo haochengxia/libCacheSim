@@ -232,6 +232,7 @@ reader_t *setup_reader(const char *const trace_path,
       abort();
   }
 
+  // TODO: figure out why 0
   if (reader->trace_format == BINARY_TRACE_FORMAT && !reader->is_zstd_file) {
     ssize_t data_region_size = reader->file_size - reader->trace_start_offset;
     if (data_region_size % reader->item_size != 0) {
