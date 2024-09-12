@@ -36,6 +36,8 @@ typedef struct {
 
 /* stats for S3FIFO */
 typedef struct {
+  int64_t miss_cnt;
+
   int64_t fifo_hits;
   int64_t main_hits;
   int64_t ghost_hits;
@@ -65,8 +67,13 @@ static bool update_s3fifo_stats(S3FIFO_stats_t *stats, cache_t *cache, const req
       if (w1 >= 0) windows[w1].main_hits++;
       if (w2 >= 0) windows[w2].main_hits++;
     }
+    
+
+
     hit = true;
   } else {
+    if (w1 >= 0) windows[w1].miss_cnt++;
+    if (w2 >= 0) windows[w2].miss_cnt++;
 //    S3FIFO_params_t *params = (S3FIFO_params_t *)cache->eviction_params;
 //    ghost_hit = params->hit_on_ghost;
     hit = false;
@@ -228,10 +235,11 @@ void profile(reader_t *reader, cache_t *cache, int report_interval,
   for (int i = 0; i < num_window; i++) {
     printf(
              "WINDOW %d, main hits %8ld, fifo hits %8ld, ghost hits %8ld, "
-             "admit main %8ld, admit fifo %8ld, move main %8ld, "
+             "admit main %8ld, admit fifo %8ld, move main %8ld, miss cnt %8ld, "
              "\n",
              i, window_stats[i].main_hits, window_stats[i].fifo_hits, window_stats[i].ghost_hits,
-             window_stats[i].n_obj_admit_to_main, window_stats[i].n_obj_admit_to_fifo, window_stats[i].n_obj_move_to_main);
+             window_stats[i].n_obj_admit_to_main, window_stats[i].n_obj_admit_to_fifo, window_stats[i].n_obj_move_to_main,
+             window_stats[i].miss_cnt);
   }
 
   S3FIFO_params_t* params = (S3FIFO_params_t*)(cache->eviction_params);
