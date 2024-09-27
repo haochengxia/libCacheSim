@@ -105,9 +105,12 @@ static bool update_s3fifo_stats(S3FIFO_stats_t *stats, cache_t *cache, const req
     if (w2 >= 0) windows[w2].n_obj_admit_to_fifo++;
   }
   if (n_obj_move_to_main != n_obj_move_to_main_old) {
-    stats->n_obj_move_to_main += n_obj_move_to_main - n_obj_move_to_main_old;
-    if (w1 >= 0) windows[w1].n_obj_move_to_main += n_obj_move_to_main - n_obj_move_to_main_old;
-    if (w2 >= 0) windows[w2].n_obj_move_to_main += n_obj_move_to_main - n_obj_move_to_main_old;
+    int64_t delta = n_obj_move_to_main - n_obj_move_to_main_old;
+    if (delta > 0) {
+      stats->n_obj_move_to_main += delta;
+      if (w1 >= 0) windows[w1].n_obj_move_to_main += delta;
+      if (w2 >= 0) windows[w2].n_obj_move_to_main += delta;
+    }
   }
   return hit;
 }
