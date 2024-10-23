@@ -39,6 +39,7 @@ struct arguments {
   char *prefetch_params;
   double sample_ratio;
   double window_ratio;
+  double skip_ratio
   int n_thread;
   int64_t n_req; /* number of requests to process */
 
@@ -59,7 +60,7 @@ void free_arg(struct arguments *args);
 
 
 void profile(reader_t *reader, cache_t *cache, int report_interval,
-             int warmup_sec, char *ofilepath, bool ignore_obj_size, double window_ratio);
+             int warmup_sec, char *ofilepath, bool ignore_obj_size, double window_ratio, double skip_ratio);
 
 void print_parsed_args(struct arguments *args);
 

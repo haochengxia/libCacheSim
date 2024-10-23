@@ -105,9 +105,11 @@ static bool update_s3fifo_stats(S3FIFO_stats_t *stats, cache_t *cache, const req
     if (w2 >= 0) windows[w2].n_obj_admit_to_fifo++;
   }
   if (n_obj_move_to_main != n_obj_move_to_main_old) {
+    stats->n_obj_move_to_main = n_obj_move_to_main;
+    // bug
     int64_t delta = n_obj_move_to_main - n_obj_move_to_main_old;
     if (delta > 0) {
-      stats->n_obj_move_to_main += delta;
+      
       if (w1 >= 0) windows[w1].n_obj_move_to_main += delta;
       if (w2 >= 0) windows[w2].n_obj_move_to_main += delta;
     }
@@ -116,7 +118,8 @@ static bool update_s3fifo_stats(S3FIFO_stats_t *stats, cache_t *cache, const req
 }
 
 void profile(reader_t *reader, cache_t *cache, int report_interval,
-              int warmup_sec, char *ofilepath, bool ignore_obj_size, double window_ratio) {
+              int warmup_sec, char *ofilepath, bool ignore_obj_size, 
+              double window_ratio, double skip_ratio) {
   /* random seed */
   srand(time(NULL));
   set_rand_seed(rand());
@@ -150,6 +153,8 @@ void profile(reader_t *reader, cache_t *cache, int report_interval,
   read_one_req(reader, req);
   uint64_t start_ts = (uint64_t)req->clock_time;
   uint64_t last_report_ts = warmup_sec;
+  
+  int64_t num_request_to_skip = (int64_t)(skip_ratio * n_total_req);
 
   double start_time = -1;
   while (req->valid) {
@@ -166,6 +171,7 @@ void profile(reader_t *reader, cache_t *cache, int report_interval,
 
     req_cnt++;
     // according to the current req counter, determine data need to be record to which time window
+    if (req_cnt <= num_request_to_skip) continue;
 
     // if (cache->get(cache, req) == false) {
     double current_percentage = ((double )req_cnt) / (double)(n_total_req);

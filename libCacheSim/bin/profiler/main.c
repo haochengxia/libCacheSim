@@ -20,7 +20,7 @@ int main(int argc, char *argv[]) {
   // run simulation of S3FIFO and record stats
   if (args.n_cache_size * args.n_eviction_algo == 1) {
     profile(args.reader, args.caches[0], args.report_interval, args.warmup_sec,
-             args.ofilepath, args.ignore_obj_size, args.window_ratio);
+            args.ofilepath, args.ignore_obj_size, args.window_ratio, args.skip_ratio);
 
     free_arg(&args);
     return 0;

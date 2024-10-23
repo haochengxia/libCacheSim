@@ -44,6 +44,7 @@ enum argp_option_short {
   OPTION_NUM_THREAD = 0x106,
   OPTION_SAMPLE_RATIO = 's',
   OPTION_WINDOW_RATIO = 'w',
+  OPTION_SKIP_RATIO = 'k',
   OPTION_REPORT_INTERVAL = 0x108,
 
   OPTION_PREFETCH_ALGO = 'p',
@@ -65,7 +66,9 @@ static struct argp_option options[] = {
     {"sample-ratio", OPTION_SAMPLE_RATIO, "1", 0,
      "Sample ratio, 1 means no sampling, 0.01 means sample 1% of objects", 2},
     {"window-ratio", OPTION_WINDOW_RATIO, "1", 0,
-     "window ratio, 0.1 means each window is 10%", 2},
+     "window ratio, 0.1 means each window is 10 percentage", 2},
+    {"skip-ratio", OPTION_SKIP_RATIO, "1", 0,
+     "skip ratio, 0.1 means skipping head 10 percentage requests", 2},
     {NULL, 0, NULL, 0, "cache related parameters:", 0},
     {"eviction-params", OPTION_EVICTION_PARAMS, "\"n-seg=4\"", 0,
      "optional params for each eviction algorithm, e.g., n-seg=4", 4},
@@ -163,6 +166,12 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
         ERROR("window ratio should be in (0, 1]\n");
       }
       break;
+    case OPTION_SKIP_RATIO:
+      arguments->skip_ratio = atof(arg);
+      if (arguments->skip_ratio < 0 || arguments->skip_ratio > 1) {
+        ERROR("skip ratio should be in (0, 1]\n");
+      }
+      break;
     case OPTION_IGNORE_OBJ_SIZE:
       arguments->ignore_obj_size = is_true(arg) ? true : false;
       break;
@@ -236,6 +245,7 @@ static void init_arg(struct arguments *args) {
   args->sample_ratio = 1.0;
 
   args->window_ratio = 1.0;
+  args->skip_ratio = 0.0;
 
   for (int i = 0; i < N_MAX_ALGO; i++) {
     args->eviction_algo[i] = NULL;
@@ -552,6 +562,9 @@ void print_parsed_args(struct arguments *args) {
 
   n += snprintf(output_str + n, OUTPUT_STR_LEN - n - 1,
                 ", window ratio %f", args->window_ratio);
+
+  n += snprintf(output_str + n, OUTPUT_STR_LEN - n - 1,
+                ", skip ratio %f", args->skip_ratio);
 
   snprintf(output_str + n, OUTPUT_STR_LEN - n - 1, "\n");
 
