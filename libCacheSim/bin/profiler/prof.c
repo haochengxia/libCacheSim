@@ -50,53 +50,42 @@ typedef struct {
 /***** helper *****/
 static bool update_s3fifo_stats(S3FIFO_stats_t *stats, cache_t *cache, const request_t *req, S3FIFO_stats_t *windows, int w1, int w2) {
   bool hit = true;
-//  bool ghost_hit = false;
-  int64_t n_obj_admit_to_main_old = ((S3FIFO_params_t *)cache->eviction_params)->n_obj_admit_to_main;
-  int64_t n_obj_admit_to_fifo_old = ((S3FIFO_params_t *)cache->eviction_params)->n_obj_admit_to_fifo;
-  int64_t n_obj_move_to_main_old = ((S3FIFO_params_t *)cache->eviction_params)->n_obj_move_to_main;
+  // check current status
+  S3FIFO_params_t *params = (S3FIFO_params_t *)cache->eviction_params;
+
+  int64_t n_obj_admit_to_main_old = params->n_obj_admit_to_main;
+  int64_t n_obj_admit_to_fifo_old = params->n_obj_admit_to_fifo;
+  int64_t n_obj_move_to_main_old = params->n_obj_move_to_main;
+
+  if (params->fifo->find(params->fifo, req, false)) {
+    // will hit in fifo
+    stats->fifo_hits++;
+    if (w1 >= 0) windows[w1].fifo_hits++;
+    if (w2 >= 0) windows[w2].fifo_hits++;
+  } else if (params->main_cache->find(params->main_cache, req, false)) {
+    // will hit in main
+    stats->main_hits++;
+    if (w1 >= 0) windows[w1].main_hits++;
+    if (w2 >= 0) windows[w2].main_hits++;
+  }
 
   if (cache_get_base(cache, req)) { // deal with one req
-    S3FIFO_params_t *params = (S3FIFO_params_t *)cache->eviction_params;
-//    ghost_hit = params->hit_on_ghost;
-    if (params->fifo->find(params->fifo, req, false)) {
-      stats->fifo_hits++;
-      if (w1 >= 0) windows[w1].fifo_hits++;
-      if (w2 >= 0) windows[w2].fifo_hits++;
-    } else if (params->main_cache->find(params->main_cache, req, false)) {
-      stats->main_hits++;
-      if (w1 >= 0) windows[w1].main_hits++;
-      if (w2 >= 0) windows[w2].main_hits++;
-    }
-    
-
-
     hit = true;
   } else {
     if (w1 >= 0) windows[w1].miss_cnt++;
     if (w2 >= 0) windows[w2].miss_cnt++;
-//    S3FIFO_params_t *params = (S3FIFO_params_t *)cache->eviction_params;
-//    ghost_hit = params->hit_on_ghost;
     hit = false;
   }
 
-//  if (ghost_hit) {
-//    stats->ghost_hits++;
-//    if (w1 >= 0) windows[w1].ghost_hits++;
-//    if (w2 >= 0) windows[w2].ghost_hits++;
-//  }
-
-  int64_t n_obj_admit_to_main = ((S3FIFO_params_t *)cache->eviction_params)->n_obj_admit_to_main;
-  int64_t n_obj_admit_to_fifo = ((S3FIFO_params_t *)cache->eviction_params)->n_obj_admit_to_fifo;
-  int64_t n_obj_move_to_main = ((S3FIFO_params_t *)cache->eviction_params)->n_obj_move_to_main;
+  // params = (S3FIFO_params_t *)cache->eviction_params;
+  int64_t n_obj_admit_to_main = params->n_obj_admit_to_main;
+  int64_t n_obj_admit_to_fifo = params->n_obj_admit_to_fifo;
+  int64_t n_obj_move_to_main = params->n_obj_move_to_main;
 
   if (n_obj_admit_to_main != n_obj_admit_to_main_old) {
     stats->n_obj_admit_to_main++;
-    if (w1 >= 0) windows[w1].n_obj_admit_to_main++;
-    if (w2 >= 0) windows[w2].n_obj_admit_to_main++;
-
-    stats->ghost_hits = stats->n_obj_admit_to_main;
-    windows[w1].ghost_hits = windows[w1].n_obj_admit_to_main;
-    windows[w2].ghost_hits = windows[w2].n_obj_admit_to_main;
+    if (w1 >= 0) { windows[w1].n_obj_admit_to_main++; windows[w1].ghost_hits++;}
+    if (w2 >= 0) { windows[w2].n_obj_admit_to_main++; windows[w2].ghost_hits++;}
   }
 
   if (n_obj_admit_to_fifo != n_obj_admit_to_fifo_old) {
@@ -104,12 +93,11 @@ static bool update_s3fifo_stats(S3FIFO_stats_t *stats, cache_t *cache, const req
     if (w1 >= 0) windows[w1].n_obj_admit_to_fifo++;
     if (w2 >= 0) windows[w2].n_obj_admit_to_fifo++;
   }
+
   if (n_obj_move_to_main != n_obj_move_to_main_old) {
     stats->n_obj_move_to_main = n_obj_move_to_main;
-    // bug
     int64_t delta = n_obj_move_to_main - n_obj_move_to_main_old;
     if (delta > 0) {
-      
       if (w1 >= 0) windows[w1].n_obj_move_to_main += delta;
       if (w2 >= 0) windows[w2].n_obj_move_to_main += delta;
     }
