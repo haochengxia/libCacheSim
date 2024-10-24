@@ -159,7 +159,7 @@ void profile(reader_t *reader, cache_t *cache, int report_interval,
 
     req_cnt++;
     // according to the current req counter, determine data need to be record to which time window
-    if (req_cnt <= num_request_to_skip) continue;
+    if (req_cnt <= num_request_to_skip) {read_one_req(reader, req); continue;}
 
     // if (cache->get(cache, req) == false) {
     double current_percentage = ((double )req_cnt) / (double)(n_total_req);
