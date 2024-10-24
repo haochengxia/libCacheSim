@@ -39,7 +39,7 @@ struct arguments {
   char *prefetch_params;
   double sample_ratio;
   double window_ratio;
-  double skip_ratio
+  double skip_ratio;
   int n_thread;
   int64_t n_req; /* number of requests to process */
 
