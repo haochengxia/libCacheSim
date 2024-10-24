@@ -130,6 +130,8 @@ static inline cache_t *create_cache(const char *trace_path, const char *eviction
     cache = S3FIFOv0_init(cc_params, eviction_params);
   } else if (strcasecmp(eviction_algo, "s3fifod") == 0) {
     cache = S3FIFOd_init(cc_params, eviction_params);
+  } else if (strcasecmp(eviction_algo, "s3fifoo") == 0) {
+    cache = S3FIFOo_init(cc_params, eviction_params);
   } else if (strcasecmp(eviction_algo, "qdlp") == 0) {
     cache = QDLP_init(cc_params, eviction_params);
   } else if (strcasecmp(eviction_algo, "sieve") == 0) {

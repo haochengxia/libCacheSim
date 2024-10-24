@@ -34,6 +34,7 @@ set(sourceC
         S3FIFO.c
         S3FIFOv0.c
         S3FIFOd.c
+        S3FIFOo.c
 
         other/flashProb.c
         other/S3LRU.c
