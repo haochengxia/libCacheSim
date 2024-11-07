@@ -122,7 +122,7 @@ cache_t *S3FIFOo_init(const common_cache_params_t ccache_params,
 
   if (fifo_ghost_cache_size > 0) {
     ccache_params_local.cache_size = fifo_ghost_cache_size;
-    params->fifo_ghost = FIFO_init(ccache_params_local, NULL);
+    params->fifo_ghost = FIFO_Hitpos_init(ccache_params_local, NULL);
     snprintf(params->fifo_ghost->cache_name, CACHE_NAME_ARRAY_LEN,
              "FIFO-ghost");
   } else {

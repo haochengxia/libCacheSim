@@ -30,11 +30,13 @@ set(sourceC
 
         FIFO_Merge.c
         FIFO_Reinsertion.c
+        FIFO_Hitpos.c
 
         S3FIFO.c
         S3FIFOv0.c
         S3FIFOd.c
         S3FIFOo.c
+        S3FIFOom.c
 
         other/flashProb.c
         other/S3LRU.c

@@ -107,6 +107,8 @@ static inline cache_t *create_cache(const char *trace_path, const char *eviction
     cache = FIFO_Merge_init(cc_params, eviction_params);
     // } else if (strcasecmp(eviction_algo, "fifo-reinsertion") == 0) {
     //   cache = FIFO_Reinsertion_init(cc_params, eviction_params);
+  } else if (strcasecmp(eviction_algo, "fifohitpos") == 0) {
+    cache = FIFO_Hitpos_init(cc_params, eviction_params);
   } else if (strcasecmp(eviction_algo, "flashProb") == 0) {
     // used to measure application level write amp
     cache = flashProb_init(cc_params, eviction_params);
@@ -132,6 +134,8 @@ static inline cache_t *create_cache(const char *trace_path, const char *eviction
     cache = S3FIFOd_init(cc_params, eviction_params);
   } else if (strcasecmp(eviction_algo, "s3fifoo") == 0) {
     cache = S3FIFOo_init(cc_params, eviction_params);
+  } else if (strcasecmp(eviction_algo, "s3fifoom") == 0) {
+    cache = S3FIFOom_init(cc_params, eviction_params);
   } else if (strcasecmp(eviction_algo, "qdlp") == 0) {
     cache = QDLP_init(cc_params, eviction_params);
   } else if (strcasecmp(eviction_algo, "sieve") == 0) {

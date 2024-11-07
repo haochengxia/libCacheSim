@@ -138,6 +138,8 @@ typedef struct cache_obj {
   struct cache_obj *hash_next;
   obj_id_t obj_id;
   uint32_t obj_size;
+  // Haocheng
+  uint32_t position;
   struct {
     struct cache_obj *prev;
     struct cache_obj *next;
