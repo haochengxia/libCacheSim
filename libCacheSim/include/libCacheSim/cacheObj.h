@@ -142,6 +142,10 @@ typedef struct cache_obj {
     struct cache_obj *prev;
     struct cache_obj *next;
   } queue;  // for LRU, FIFO, etc.
+  
+  // for hit position in FIFO
+  uint64_t unique_order;
+
 #ifdef SUPPORT_TTL
   uint32_t exp_time;
 #endif
