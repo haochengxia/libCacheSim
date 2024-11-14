@@ -54,6 +54,8 @@ cache_t *CR_LFU_init(const common_cache_params_t ccache_params, const char *cach
 
 cache_t *FIFO_init(const common_cache_params_t ccache_params, const char *cache_specific_params);
 
+cache_t *FIFO_Pos_init(const common_cache_params_t ccache_params, const char *cache_specific_params);
+
 cache_t *GDSF_init(const common_cache_params_t ccache_params, const char *cache_specific_params);
 
 cache_t *Hyperbolic_init(const common_cache_params_t ccache_params, const char *cache_specific_params);

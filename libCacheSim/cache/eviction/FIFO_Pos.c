@@ -138,7 +138,7 @@ static cache_obj_t *FIFO_Pos_find(cache_t *cache, const request_t *req,
 static cache_obj_t *FIFO_Pos_insert(cache_t *cache, const request_t *req) {
   FIFO_Pos_params_t *params = (FIFO_Pos_params_t *)cache->eviction_params;
   cache_obj_t *obj = cache_insert_base(cache, req);
-  obj->unique_id = params->counter++;
+  obj->unique_order = params->counter++;
   prepend_obj_to_head(&params->q_head, &params->q_tail, obj);
 
   return obj;
@@ -211,9 +211,7 @@ static bool FIFO_Pos_remove(cache_t *cache, const obj_id_t obj_id) {
   // ghost hit
   FIFO_Pos_params_t* params = (FIFO_Pos_params_t *)cache->eviction_params;
   FILE *ofs = params->log_file;
-  fprintf(ofs, "%ld,%ld\n", params->q_head->unique_id, obj->unique_id);  // head_order, hit_order 
-
-  FIFO_Pos_params_t *params = (FIFO_Pos_params_t *)cache->eviction_params;
+  fprintf(ofs, "%ld,%ld,%ld\n", params->q_tail->unique_order, params->q_head->unique_order, obj->unique_order);  // tail_order, head_order, hit_order 
 
   remove_obj_from_list(&params->q_head, &params->q_tail, obj);
   cache_remove_obj_base(cache, obj, true);
