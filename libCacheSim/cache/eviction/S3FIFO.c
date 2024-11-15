@@ -50,6 +50,7 @@ typedef struct {
   double fifo_size_ratio;
   double ghost_size_ratio;
   char main_cache_type[32];
+  char* trace_name;
 
   bool has_evicted;
   request_t *req_local;
@@ -123,7 +124,7 @@ cache_t *S3FIFO_init(const common_cache_params_t ccache_params, const char *cach
 
   if (fifo_ghost_cache_size > 0) {
     ccache_params_local.cache_size = fifo_ghost_cache_size;
-    params->fifo_ghost = FIFO_Pos_init(ccache_params_local, NULL);  // TODO(haocheng): pass name
+    params->fifo_ghost = FIFO_Pos_init(ccache_params_local, params->trace_name);  // TODO(haocheng): pass name
     snprintf(params->fifo_ghost->cache_name, CACHE_NAME_ARRAY_LEN, "FIFO-ghost");
   } else {
     params->fifo_ghost = NULL;
@@ -512,6 +513,8 @@ static void S3FIFO_parse_params(cache_t *cache, const char *cache_specific_param
       params->ghost_size_ratio = strtod(value, NULL);
     } else if (strcasecmp(key, "move-to-main-threshold") == 0) {
       params->move_to_main_threshold = atoi(value);
+    } else if (strcasecmp(key, "ghost-log-name") == 0) {
+      params->trace_name = value;
     } else if (strcasecmp(key, "print") == 0) {
       printf("parameters: %s\n", S3FIFO_current_params(params));
       exit(0);

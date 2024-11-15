@@ -64,8 +64,8 @@ cache_t *FIFO_Pos_init(const common_cache_params_t ccache_params,
   params->q_head = NULL;
   params->q_tail = NULL;
   params->counter = 0;
-  params->log_file = fopen("FIFO_Pos.log", "w+");
-
+  params->log_file = fopen(cache_specific_params, "w+");
+  fprintf(params->log_file, "cache_size,%ld,0\n",cache->cache_size);  // tail_order, head_order, hit_order 
   return cache;
 }
 
