@@ -66,7 +66,35 @@ cache_t *FIFO_init(const common_cache_params_t ccache_params,
   FIFO_params_t *params = (FIFO_params_t *)cache->eviction_params;
   params->q_head = NULL;
   params->q_tail = NULL;
+  params->timestamp = 0;
+  params->file = NULL;
+  params->only_first = ccache_params.only_first;
 
+  params->dump_ghost = false;  // current fifo is dumping ghost or not
+  params->dump_main = false;
+  params->dump_small = false;
+
+  
+  if (cache_specific_params != NULL) {
+    params->file = fopen(cache_specific_params, "w+");
+    if (params->file == NULL) {
+        perror("Failed to open file");
+        return NULL;
+    }
+
+    if (strncmp(cache_specific_params, "/mnt/cfs/logfile/ghost", strlen("/mnt/cfs/logfile/ghost")) == 0) {
+      params->dump_ghost = true;
+    } else if (strncmp(cache_specific_params, "/mnt/cfs/logfile/main", strlen("/mnt/cfs/logfile/main")) == 0) {
+      params->dump_main = true;
+    } else if (strncmp(cache_specific_params, "/mnt/cfs/logfile/small", strlen("/mnt/cfs/logfile/small")) == 0) {
+      params->dump_small = true;
+    }
+    // printf("###dump ghost %d, main %d, small %d\n", params->dump_ghost, params->dump_main, params->dump_small);
+
+    // dump infomation in the first line
+    fprintf(params->file, "%s,%ld,0\n", cache_specific_params, cache->cache_size);
+  }
+  
   return cache;
 }
 
@@ -76,6 +104,8 @@ cache_t *FIFO_init(const common_cache_params_t ccache_params,
  * @param cache
  */
 static void FIFO_free(cache_t *cache) {
+  FIFO_params_t *params = (FIFO_params_t *)cache->eviction_params;
+  if (params->file != NULL) fclose(params->file);
   free(cache->eviction_params);
   cache_struct_free(cache);
 }
@@ -121,6 +151,25 @@ static bool FIFO_get(cache_t *cache, const request_t *req) {
  */
 static cache_obj_t *FIFO_find(cache_t *cache, const request_t *req,
                                const bool update_cache) {
+  // real hit inner the queue, to avoid repeating records
+  if (update_cache) { 
+    cache_obj_t *obj = cache_find_base(cache, req, false);
+    if (obj == NULL) return cache_find_base(cache, req, update_cache);
+
+    
+    // if hit
+    FIFO_params_t *params = (FIFO_params_t *)cache->eviction_params;
+    if (!params->only_first || !obj->ever_hit) {
+      if (params->file != NULL && params->dump_main) {
+        fprintf(params->file, "%ld,%ld,%ld\n", obj->timestamp, params->q_head->timestamp, params->q_tail->timestamp);
+      }
+
+      if (params->file != NULL && params->dump_small) {
+        fprintf(params->file, "%ld,%ld,%ld\n", obj->timestamp, params->q_head->timestamp, params->q_tail->timestamp);
+      }
+      obj->ever_hit = true;
+    }
+  }
   return cache_find_base(cache, req, update_cache);
 }
 
@@ -137,6 +186,8 @@ static cache_obj_t *FIFO_find(cache_t *cache, const request_t *req,
 static cache_obj_t *FIFO_insert(cache_t *cache, const request_t *req) {
   FIFO_params_t *params = (FIFO_params_t *)cache->eviction_params;
   cache_obj_t *obj = cache_insert_base(cache, req);
+  obj->ever_hit = false;
+  obj->timestamp = params->timestamp++;
   prepend_obj_to_head(&params->q_head, &params->q_tail, obj);
 
   return obj;
@@ -207,6 +258,11 @@ static bool FIFO_remove(cache_t *cache, const obj_id_t obj_id) {
   }
 
   FIFO_params_t *params = (FIFO_params_t *)cache->eviction_params;
+  
+  // ghost hit
+  if (params->file != NULL && params->dump_ghost) {
+    fprintf(params->file, "%ld,%ld,%ld\n", obj->timestamp, params->q_head->timestamp, params->q_tail->timestamp);
+  }
 
   remove_obj_from_list(&params->q_head, &params->q_tail, obj);
   cache_remove_obj_base(cache, obj, true);

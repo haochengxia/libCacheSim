@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdio.h>
 #include "cache.h"
 
 #ifdef __cplusplus
@@ -9,6 +10,15 @@ extern "C" {
 typedef struct {
   cache_obj_t *q_head;
   cache_obj_t *q_tail;
+  
+  uint64_t timestamp;
+  FILE* file;
+
+  bool dump_ghost;
+  bool dump_main;
+  bool dump_small; // small fifo queue
+
+  bool only_first;
 } FIFO_params_t;
 
 /* used by LFU related */

@@ -34,6 +34,7 @@ typedef struct {
   uint64_t default_ttl;
   int32_t hashpower;
   bool consider_obj_metadata;
+  bool only_first;
 } common_cache_params_t;
 
 typedef cache_t *(*cache_init_func_ptr)(const common_cache_params_t,

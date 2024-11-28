@@ -42,12 +42,17 @@ typedef struct {
   int move_to_main_threshold;
   double small_size_ratio;
   double ghost_size_ratio;
+  char main_cache_type[32];
+  bool main_is_fifo;
+  bool dump_log;
+  char* log_name;
+  bool only_first;
 
   bool has_evicted;
   request_t *req_local;
 } S3FIFO_params_t;
 
-static const char *DEFAULT_CACHE_PARAMS = "small-size-ratio=0.10,ghost-size-ratio=0.90,move-to-main-threshold=2";
+static const char *DEFAULT_CACHE_PARAMS = "fifo-size-ratio=0.10,ghost-size-ratio=0.90,move-to-main-threshold=2,main-is-fifo=1,dump-log=0,log-name=test.log,only-first=0";
 
 // ***********************************************************************
 // ****                                                               ****
@@ -104,25 +109,56 @@ cache_t *S3FIFO_init(const common_cache_params_t ccache_params, const char *cach
     S3FIFO_parse_params(cache, cache_specific_params);
   }
 
+  // check params
+  // printf("dump log: %d\n", params->dump_log);
+  // printf("log name (prefix): %s\n", params->log_name);
+  // printf("main is fifo: %d\n", params->main_fifo);
+  if (params->only_first) {
+    printf("[INFO] only first hit in main and small fifo will be considered\n");
+  }
+
   int64_t small_fifo_size = (int64_t)ccache_params.cache_size * params->small_size_ratio;
   int64_t main_fifo_size = ccache_params.cache_size - small_fifo_size;
   int64_t ghost_fifo_size = (int64_t)(ccache_params.cache_size * params->ghost_size_ratio);
 
   common_cache_params_t ccache_params_local = ccache_params;
   ccache_params_local.cache_size = small_fifo_size;
-  params->small_fifo = FIFO_init(ccache_params_local, NULL);
+  
+  ccache_params_local.only_first = params->only_first;
+  
+  if (!params->dump_log)
+    params->small_fifo = FIFO_init(ccache_params_local, NULL);
+  else {
+    char log_name[150] = "/mnt/cfs/logfile/small.";
+    strcat(log_name, params->log_name);
+    params->small_fifo = FIFO_init(ccache_params_local, log_name);
+  }
   params->has_evicted = false;
 
   if (ghost_fifo_size > 0) {
     ccache_params_local.cache_size = ghost_fifo_size;
-    params->ghost_fifo = FIFO_init(ccache_params_local, NULL);
+
+    if (!params->dump_log)
+      params->ghost_fifo = FIFO_init(ccache_params_local, NULL);
+    else {
+      char log_name[150] = "/mnt/cfs/logfile/ghost.";
+      strcat(log_name, params->log_name);
+      params->ghost_fifo = FIFO_init(ccache_params_local, log_name);
+    }
     snprintf(params->ghost_fifo->cache_name, CACHE_NAME_ARRAY_LEN, "FIFO-ghost");
   } else {
     params->ghost_fifo = NULL;
   }
 
   ccache_params_local.cache_size = main_fifo_size;
-  params->main_fifo = FIFO_init(ccache_params_local, NULL);
+
+  if (!params->dump_log)
+    params->main_fifo = FIFO_init(ccache_params_local, NULL);
+  else {
+    char log_name[150] = "/mnt/cfs/logfile/main.";
+    strcat(log_name, params->log_name);
+    params->main_fifo = FIFO_init(ccache_params_local, log_name);
+  }
 
   snprintf(cache->cache_name, CACHE_NAME_ARRAY_LEN, "S3FIFO-%.4lf-%d", params->small_size_ratio,
            params->move_to_main_threshold);
@@ -323,7 +359,10 @@ static void S3FIFO_evict_main(cache_t *cache, const request_t *req) {
     DEBUG_ASSERT(obj_to_evict != NULL);
     int freq = obj_to_evict->S3FIFO.freq;
     copy_cache_obj_to_request(params->req_local, obj_to_evict);
-    if (freq >= 1) {
+    bool condition;
+    if (params->main_is_fifo) condition = false;
+    else condition = (freq >= 1);
+    if (condition) {
       // we need to evict first because the object to insert has the same obj_id
       main->remove(main, obj_to_evict->obj_id);
       obj_to_evict = NULL;
@@ -439,6 +478,14 @@ static void S3FIFO_parse_params(cache_t *cache, const char *cache_specific_param
       params->ghost_size_ratio = strtod(value, NULL);
     } else if (strcasecmp(key, "move-to-main-threshold") == 0) {
       params->move_to_main_threshold = atoi(value);
+    } else if (strcasecmp(key, "dump-log") == 0) {
+      params->dump_log = atoi(value);
+    } else if (strcasecmp(key, "only-first") == 0) {
+      params->only_first = atoi(value); // only first indicates that only first hit in main and small fifo will ne counted
+    } else if (strcasecmp(key, "log-name") == 0) {
+      params->log_name = value;
+    } else if (strcasecmp(key, "main-is-fifo") == 0) {
+      params->main_is_fifo = atoi(value);
     } else if (strcasecmp(key, "print") == 0) {
       printf("parameters: %s\n", S3FIFO_current_params(params));
       exit(0);
