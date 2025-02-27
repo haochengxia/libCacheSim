@@ -45,9 +45,12 @@ typedef struct {
 
   bool has_evicted;
   request_t *req_local;
+
+  /* new parameters */
+  bool reset_freq;
 } S3FIFO_params_t;
 
-static const char *DEFAULT_CACHE_PARAMS = "small-size-ratio=0.10,ghost-size-ratio=0.90,move-to-main-threshold=2";
+static const char *DEFAULT_CACHE_PARAMS = "small-size-ratio=0.10,ghost-size-ratio=0.90,move-to-main-threshold=2,reset-freq=0";
 
 // ***********************************************************************
 // ****                                                               ****
@@ -299,6 +302,12 @@ static void S3FIFO_evict_small(cache_t *cache, const request_t *req) {
 
     if (obj_to_evict->S3FIFO.freq >= params->move_to_main_threshold) {
       cache_obj_t *new_obj = main->insert(main, params->req_local);
+      // ---------------------------------------------------------
+      // reset freq if reset_freq is true
+      if (params->reset_freq) {
+        new_obj->S3FIFO.freq = 0;
+      }
+      // ---------------------------------------------------------
     } else {
       // insert to ghost
       if (ghost != NULL) {
@@ -439,6 +448,8 @@ static void S3FIFO_parse_params(cache_t *cache, const char *cache_specific_param
       params->ghost_size_ratio = strtod(value, NULL);
     } else if (strcasecmp(key, "move-to-main-threshold") == 0) {
       params->move_to_main_threshold = atoi(value);
+    } else if (strcasecmp(key, "reset-freq") == 0) {
+      params->reset_freq = (atoi(value) != 0);
     } else if (strcasecmp(key, "print") == 0) {
       printf("parameters: %s\n", S3FIFO_current_params(params));
       exit(0);
