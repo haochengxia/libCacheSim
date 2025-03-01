@@ -48,9 +48,15 @@ typedef struct {
 
   /* new parameters */
   bool reset_freq;
+  bool quick_promote;
+  bool all_ghost;
+  bool skip;
+  double sskip; // sskip ratio means we only consider to change the freq of a object after (fifo_size * sskip) requests
+
+  int64_t req_count;
 } S3FIFO_params_t;
 
-static const char *DEFAULT_CACHE_PARAMS = "small-size-ratio=0.10,ghost-size-ratio=0.90,move-to-main-threshold=2,reset-freq=0";
+static const char *DEFAULT_CACHE_PARAMS = "small-size-ratio=0.10,ghost-size-ratio=0.90,move-to-main-threshold=2,reset-freq=1,quick-promote=0,all-ghost=0,sskip=0.9,skip=0";
 
 // ***********************************************************************
 // ****                                                               ****
@@ -130,6 +136,8 @@ cache_t *S3FIFO_init(const common_cache_params_t ccache_params, const char *cach
   snprintf(cache->cache_name, CACHE_NAME_ARRAY_LEN, "S3FIFO-%.4lf-%d", params->small_size_ratio,
            params->move_to_main_threshold);
 
+  params->req_count = 0;
+
   return cache;
 }
 
@@ -171,6 +179,7 @@ static void S3FIFO_free(cache_t *cache) {
  */
 static bool S3FIFO_get(cache_t *cache, const request_t *req) {
   S3FIFO_params_t *params = (S3FIFO_params_t *)cache->eviction_params;
+  params->req_count += 1;
   DEBUG_ASSERT(params->small_fifo->get_occupied_byte(params->small_fifo) +
                    params->main_fifo->get_occupied_byte(params->main_fifo) <=
                cache->cache_size);
@@ -215,7 +224,22 @@ static cache_obj_t *S3FIFO_find(cache_t *cache, const request_t *req, const bool
   params->hit_on_ghost = false;
   cache_obj_t *obj = params->small_fifo->find(params->small_fifo, req, true);
   if (obj != NULL) {
-    obj->S3FIFO.freq += 1;
+    if (params->quick_promote && obj->S3FIFO.freq >= params->move_to_main_threshold) {
+      // insert into main fifo
+      obj_id_t obj_id = obj->obj_id;
+      copy_cache_obj_to_request(params->req_local, obj);
+      params->main_fifo->insert(params->main_fifo, params->req_local);
+      params->small_fifo->remove(params->small_fifo, obj_id);
+    }
+    // update freq in small fifo
+    if (params->skip) {
+      if (params->req_count - obj->S3FIFO.req_id >= params->small_fifo->cache_size * params->sskip) {
+        obj->S3FIFO.freq += 1;
+      }
+    } else {
+      obj->S3FIFO.freq += 1;
+    }
+    
     return obj;
   }
 
@@ -268,6 +292,7 @@ static cache_obj_t *S3FIFO_insert(cache_t *cache, const request_t *req) {
   }
 
   obj->S3FIFO.freq = 0;
+  obj->S3FIFO.req_id = params->req_count;
 
   return obj;
 }
@@ -300,12 +325,11 @@ static void S3FIFO_evict_small(cache_t *cache, const request_t *req) {
     // need to copy the object before it is evicted
     copy_cache_obj_to_request(params->req_local, obj_to_evict);
 
-    if (obj_to_evict->S3FIFO.freq >= params->move_to_main_threshold) {
+    if (obj_to_evict->S3FIFO.freq >= params->move_to_main_threshold && !params->all_ghost) {
       cache_obj_t *new_obj = main->insert(main, params->req_local);
       // ---------------------------------------------------------
-      // reset freq if reset_freq is true
-      if (params->reset_freq) {
-        new_obj->S3FIFO.freq = 0;
+      if (!params->reset_freq) {
+        new_obj->S3FIFO.freq = MIN(obj_to_evict->S3FIFO.freq, 3);
       }
       // ---------------------------------------------------------
     } else {
@@ -450,6 +474,14 @@ static void S3FIFO_parse_params(cache_t *cache, const char *cache_specific_param
       params->move_to_main_threshold = atoi(value);
     } else if (strcasecmp(key, "reset-freq") == 0) {
       params->reset_freq = (atoi(value) != 0);
+    } else if (strcasecmp(key, "quick-promote") == 0) {
+      params->quick_promote = (atoi(value) != 0);
+    } else if (strcasecmp(key, "all-ghost") == 0) {
+      params->all_ghost = (atoi(value) != 0);
+    } else if (strcasecmp(key, "skip") == 0) {
+      params->skip = (atoi(value) != 0);
+    } else if (strcasecmp(key, "sskip") == 0) {
+      params->sskip = strtod(value, NULL);
     } else if (strcasecmp(key, "print") == 0) {
       printf("parameters: %s\n", S3FIFO_current_params(params));
       exit(0);
