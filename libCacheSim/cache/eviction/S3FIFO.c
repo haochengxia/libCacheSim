@@ -224,6 +224,11 @@ static cache_obj_t *S3FIFO_find(cache_t *cache, const request_t *req, const bool
   params->hit_on_ghost = false;
   cache_obj_t *obj = params->small_fifo->find(params->small_fifo, req, true);
   if (obj != NULL) {
+    // fifo
+    if (params->small_size_ratio >= 1.0) {
+      return obj;
+    }
+
     if (params->quick_promote && obj->S3FIFO.freq >= params->move_to_main_threshold) {
       // insert into main fifo
       obj_id_t obj_id = obj->obj_id;
@@ -243,8 +248,12 @@ static cache_obj_t *S3FIFO_find(cache_t *cache, const request_t *req, const bool
     return obj;
   }
 
+  // fifo
+  if (params->small_size_ratio >= 1.0) {
+    return NULL;
+  }
+
   if (params->ghost_fifo != NULL && params->ghost_fifo->remove(params->ghost_fifo, req->obj_id)) {
-    // if object in ghost_fifo, remove will return true
     params->hit_on_ghost = true;
   }
 
@@ -273,6 +282,14 @@ static cache_obj_t *S3FIFO_insert(cache_t *cache, const request_t *req) {
 
   cache_t *small = params->small_fifo;
   cache_t *main = params->main_fifo;
+
+  // fifo
+  if (params->small_size_ratio >= 1.0) {
+    obj = small->insert(small, req);
+    obj->S3FIFO.freq = 0;
+    obj->S3FIFO.req_id = params->req_count;
+    return obj;
+  }
 
   if (params->hit_on_ghost) {
     /* insert into main FIFO */
@@ -317,6 +334,13 @@ static void S3FIFO_evict_small(cache_t *cache, const request_t *req) {
   cache_t *small = params->small_fifo;
   cache_t *ghost = params->ghost_fifo;
   cache_t *main = params->main_fifo;
+
+  // fifo
+  if (params->small_size_ratio >= 1.0) {
+    cache_obj_t *obj_to_evict = small->to_evict(small, req);
+    small->remove(small, obj_to_evict->obj_id);
+    return;
+  }
 
   bool has_evicted = false;
   while (!has_evicted && small->get_occupied_byte(small) > 0) {
