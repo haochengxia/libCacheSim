@@ -161,11 +161,11 @@ static cache_obj_t *FIFO_find(cache_t *cache, const request_t *req,
     FIFO_params_t *params = (FIFO_params_t *)cache->eviction_params;
     if (!params->only_first || !obj->ever_hit) {
       if (params->file != NULL && params->dump_main) {
-        fprintf(params->file, "%ld,%ld,%ld\n", obj->timestamp, params->q_head->timestamp, params->q_tail->timestamp);
+        fprintf(params->file, "%ld,%ld,%ld,%ld\n", obj->obj_id, obj->timestamp, params->q_head->timestamp, params->q_tail->timestamp);
       }
 
       if (params->file != NULL && params->dump_small) {
-        fprintf(params->file, "%ld,%ld,%ld\n", obj->timestamp, params->q_head->timestamp, params->q_tail->timestamp);
+        fprintf(params->file, "%ld,%ld,%ld,%ld\n", obj->obj_id, obj->timestamp, params->q_head->timestamp, params->q_tail->timestamp);
       }
       obj->ever_hit = true;
     }
@@ -261,7 +261,7 @@ static bool FIFO_remove(cache_t *cache, const obj_id_t obj_id) {
   
   // ghost hit
   if (params->file != NULL && params->dump_ghost) {
-    fprintf(params->file, "%ld,%ld,%ld\n", obj->timestamp, params->q_head->timestamp, params->q_tail->timestamp);
+    fprintf(params->file, "%ld,%ld,%ld,%ld\n", obj->obj_id, obj->timestamp, params->q_head->timestamp, params->q_tail->timestamp);
   }
 
   remove_obj_from_list(&params->q_head, &params->q_tail, obj);

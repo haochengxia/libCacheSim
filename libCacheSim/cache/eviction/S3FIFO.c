@@ -52,7 +52,7 @@ typedef struct {
   request_t *req_local;
 } S3FIFO_params_t;
 
-static const char *DEFAULT_CACHE_PARAMS = "fifo-size-ratio=0.10,ghost-size-ratio=0.90,move-to-main-threshold=2,main-is-fifo=1,dump-log=0,log-name=test.log,only-first=0";
+static const char *DEFAULT_CACHE_PARAMS = "fifo-size-ratio=0.10,ghost-size-ratio=0.90,move-to-main-threshold=2,main-is-fifo=0,dump-log=1,log-name=test.log,only-first=0";
 
 // ***********************************************************************
 // ****                                                               ****
