@@ -1,0 +1,40 @@
+name: Python
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+      
+      - name: Prepare
+        run: bash scripts/install_dependency.sh
+
+      - name: Install XGBoost and LightGBM
+        run: |
+          pip install xgboost lightgbm
+          # Set environment variables to help CMake find the libraries
+          echo "XGBOOST_ROOT=$(python -c 'import xgboost; print(xgboost.__file__)')" >> $GITHUB_ENV
+          echo "LIGHTGBM_ROOT=$(python -c 'import lightgbm; print(lightgbm.__file__)')" >> $GITHUB_ENV
+      
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+      
+      - name: Build libCacheSim-python
+        run: |
+          cd libCacheSim-python
+          pip install -e .
+      
+      - name: Run tests
+        run: |
+          cd libCacheSim-python
+          pytest tests/
