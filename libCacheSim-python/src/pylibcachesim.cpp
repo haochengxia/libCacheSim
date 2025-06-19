@@ -277,6 +277,7 @@ PYBIND11_MODULE(_libcachesim, m) {
                 Cache: A new FIFO cache instance.
       )pbdoc");
 
+#ifdef ENABLE_LRB
   /**
    * @brief Create a LRB cache instance.
    */
@@ -298,6 +299,15 @@ PYBIND11_MODULE(_libcachesim, m) {
             Returns:
                 Cache: A new LRB cache instance.
       )pbdoc");
+#else
+  // TODO(haocheng): add a dummy function to avoid the error when LRB is not enabled
+  m.def(
+      "LRB_init",
+      [](uint64_t cache_size, std::string objective) {
+        throw std::runtime_error("LRB is not enabled");
+      },
+      py::arg("cache_size"), py::arg("objective") = "byte-miss-ratio");
+#endif
 
   /**
    * @brief Create a LRU cache instance.
@@ -372,6 +382,7 @@ PYBIND11_MODULE(_libcachesim, m) {
                 Cache: A new Sieve cache instance.
       )pbdoc");
 
+#ifdef ENABLE_3L_CACHE
   /**
    * @brief Create a ThreeL cache instance.
    */
@@ -394,6 +405,15 @@ PYBIND11_MODULE(_libcachesim, m) {
             Returns:
                 Cache: A new ThreeL cache instance.
       )pbdoc");
+#else
+  // TODO(haocheng): add a dummy function to avoid the error when ThreeLCache is not enabled
+  m.def(
+      "ThreeLCache_init",
+      [](uint64_t cache_size, std::string objective) {
+        throw std::runtime_error("ThreeLCache is not enabled");
+      },
+      py::arg("cache_size"), py::arg("objective") = "byte-miss-ratio");
+#endif
 
   /**
    * @brief Create a TinyLFU cache instance.

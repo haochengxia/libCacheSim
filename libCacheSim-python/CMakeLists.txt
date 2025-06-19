@@ -113,7 +113,7 @@ else()
 endif()
 
 # Only include sources if dependencies are available
-if(ENABLE_XGBOOST)
+if(ENABLE_LIGHTGBM)
     file(GLOB_RECURSE LRB_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/../libCacheSim/cache/eviction/LRB/*.cpp"
     )
@@ -123,6 +123,10 @@ if(ENABLE_XGBOOST)
 else()
     set(LRB_SOURCES "")
     set(3L_CACHE_SOURCES "")
+
+    # disable the features
+    add_compile_definitions(ENABLE_3L_CACHE=0)
+    add_compile_definitions(ENABLE_LRB=0)
 endif()
 
 file(GLOB_RECURSE CACHE_CPP_SOURCES
