@@ -10,6 +10,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
 
+option(ENABLE_LRB "enable LRB" OFF)
+option(ENABLE_3L_CACHE "enable 3LCache" OFF)
+
 project(
   ${SKBUILD_PROJECT_NAME}
   VERSION ${SKBUILD_PROJECT_VERSION}
@@ -46,13 +49,6 @@ else()
     add_compile_definitions(LOGLEVEL=7)
 endif()
 
-option(ENABLE_LRB "enable LRB" ON)
-option(ENABLE_GLCACHE "enable GLCache" ON)
-option(ENABLE_3L_CACHE "enable 3LCache" ON)
-add_compile_definitions(ENABLE_GLCACHE=1)
-add_compile_definitions(ENABLE_LRB=1)
-add_compile_definitions(ENABLE_3L_CACHE=1)
-
 # find python and pybind11
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
 find_package(pybind11 CONFIG REQUIRED)
@@ -79,11 +75,15 @@ set_target_properties(utils PROPERTIES
 target_compile_options(utils PRIVATE -fPIC)
 target_link_libraries(utils PRIVATE ${GLIB2_LIBRARIES})
 
-file(GLOB_RECURSE CACHE_SOURCES
+file(GLOB CACHE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/../libCacheSim/cache/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/../libCacheSim/cache/eviction/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/../libCacheSim/cache/admission/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/../libCacheSim/cache/prefetch/*.c"
+
+    "${CMAKE_CURRENT_SOURCE_DIR}/../libCacheSim/cache/eviction/fifo/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../libCacheSim/cache/eviction/other/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../libCacheSim/cache/eviction/belady/*.c"
 )
 
 # Try to find XGBoost and LightGBM (optional)
@@ -123,19 +123,17 @@ if(ENABLE_LIGHTGBM)
 else()
     set(LRB_SOURCES "")
     set(3L_CACHE_SOURCES "")
-
-    # disable the features
-    add_compile_definitions(ENABLE_3L_CACHE=0)
-    add_compile_definitions(ENABLE_LRB=0)
 endif()
 
-file(GLOB_RECURSE CACHE_CPP_SOURCES
+file(GLOB CACHE_CPP_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/../libCacheSim/cache/eviction/LHD/*"
     "${CMAKE_CURRENT_SOURCE_DIR}/../libCacheSim/cache/eviction/cpp/*"
 )
 
-file(GLOB_RECURSE DS_SOURCES
+file(GLOB DS_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/../libCacheSim/dataStructure/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../libCacheSim/dataStructure/hashtable/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../libCacheSim/dataStructure/hash/murmur3.c"
 )
 
 file(GLOB_RECURSE READER_SOURCES

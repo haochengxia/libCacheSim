@@ -1,12 +1,16 @@
 import pytest
-import os
 
-from libcachesim import Cache, Reader, Request, create_cache, open_trace, TraceType
 from libcachesim import (
-    FIFO, ARC, Clock, LRB, LRU, S3FIFO, Sieve, ThreeLCache,
-    TinyLFU, TwoQ,
+    ARC,
+    FIFO,
+    LRU,
+    S3FIFO,
+    Clock,
+    Sieve,
+    TinyLFU,
+    TwoQ,
+    create_cache,
 )
-
 from tests.utils import get_reference_data
 
 
@@ -14,11 +18,9 @@ from tests.utils import get_reference_data
     FIFO,
     ARC,
     Clock,
-    # LRB,
     LRU,
     S3FIFO,
     Sieve,
-    # ThreeLCache,
     TinyLFU,
     TwoQ,
 ])
@@ -45,11 +47,9 @@ def test_eviction_algo(eviction_algo, cache_size_ratio, mock_reader):
     "FIFO",
     "ARC",
     "Clock",
-    # "LRB",
     "LRU",
     "S3FIFO",
     "Sieve",
-    # "3LCache",
     "TinyLFU",
     "TwoQ",
 ])
