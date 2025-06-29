@@ -236,7 +236,15 @@ PYBIND11_MODULE(_libcachesim, m) {  // NOLINT(readability-named-parameter)
       .def_readwrite("hv", &request_t::hv)
       .def_readwrite("obj_id", &request_t::obj_id)
       .def_readwrite("obj_size", &request_t::obj_size)
-      .def_readwrite("op", &request_t::op);
+      .def_readwrite("op", &request_t::op)
+      // __repr__
+      .def("__repr__", [](const request_t& self) {
+        return "Request(clock_time=" + std::to_string(self.clock_time) +
+               ", hv=" + std::to_string(self.hv) + ", obj_id=" +
+               std::to_string(self.obj_id) + ", obj_size=" +
+               std::to_string(self.obj_size) + ", op=" + std::to_string(self.op) +
+               ")";
+      });
 
   /**
    * @brief Reader structure
