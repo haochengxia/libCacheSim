@@ -30,3 +30,27 @@ def mock_reader():
             pass
         # Don't explicitly del reader here, let Python handle it
         gc.collect()
+
+
+@pytest.fixture
+def mock_reader_without_obj_size():
+    data_file = os.path.join(  # noqa: PTH118
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),  # noqa: PTH120
+        "data",
+        "cloudPhysicsIO.oracleGeneral.bin"
+    )
+    reader: Reader = open_trace(
+        data_file,
+        type=TraceType.ORACLE_GENERAL_TRACE.value,
+        ignore_obj_size=True)
+    try:
+        yield reader
+    finally:
+        # More careful cleanup
+        try:
+            if hasattr(reader, 'close'):
+                reader.close()
+        except:
+            pass
+        # Don't explicitly del reader here, let Python handle it
+        gc.collect()

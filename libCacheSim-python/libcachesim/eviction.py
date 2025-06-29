@@ -28,6 +28,10 @@ class EvictionPolicyBase(ABC):
         pass
 
     @abstractmethod
+    def process_trace(self, reader: Reader, max_requests: int = -1, max_seconds: int = -1, start_time: int = -1, end_time: int = -1) -> float:
+        pass
+
+    @abstractmethod
     def __repr__(self) -> str:
         pass
 

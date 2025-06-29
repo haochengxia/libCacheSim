@@ -2,6 +2,7 @@ import pytest
 import gc
 import sys
 import os
+import time
 
 from libcachesim import (
     ARC,

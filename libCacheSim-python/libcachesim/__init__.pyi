@@ -30,7 +30,7 @@ from .const import TraceType
 def open_trace(
     trace_path: str,
     type: TraceType,
-    reader_init_param: dict | reader_init_param_t | None = None
+    ignore_obj_size: bool = False
 ) -> Reader: ...
 
 
