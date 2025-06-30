@@ -272,6 +272,11 @@ PYBIND11_MODULE(_libcachesim, m) {  // NOLINT(readability-named-parameter)
             Returns:
                 int: The working set size of the trace.
       )pbdoc")
+      .def("close", [](reader_t& self) {
+        close_trace(&self);
+      }, R"pbdoc(
+            Close the trace file and free resources.
+      )pbdoc")
       .def("__iter__", [](reader_t& self) -> reader_t& { return self; })
       .def("__next__", [](reader_t& self) {
         auto req = std::unique_ptr<request_t, RequestDeleter>(new_request());
@@ -318,75 +323,15 @@ PYBIND11_MODULE(_libcachesim, m) {  // NOLINT(readability-named-parameter)
    */
   m.def(
       "open_trace",
-      [](const std::string& trace_path, int type, bool ignore_obj_size) {
+      [](const std::string& trace_path, trace_type_e type, bool ignore_obj_size) {
         // Create an init_param instance, it will be populated from Python
         reader_init_param_t init_param = {};
 
         init_param.ignore_obj_size = ignore_obj_size;
 
-
-        // // === IMPORTANT: Initialize binary_fmt_str to nullptr ===
-        // // This is crucial if it's not always set from Python,
-        // // so that free() won't be called on uninitialized memory if not set
-        // // later.
-        // init_param.binary_fmt_str = nullptr;
-
-        // // Populate other fields from Python dict or object
-        // if (py::isinstance<py::dict>(params)) {
-        //   py::dict dict_params = params.cast<py::dict>();
-        //   init_param.time_field = dict_params["time_field"].cast<int>();
-        //   init_param.obj_id_field = dict_params["obj_id_field"].cast<int>();
-        //   init_param.obj_size_field = dict_params["obj_size_field"].cast<int>();
-        //   init_param.delimiter =
-        //       dict_params["delimiter"].cast<std::string>()[0];
-        //   init_param.has_header = dict_params["has_header"].cast<bool>();
-        //   // If binary_fmt_str is in dict_params, set it via property setter
-        //   if (dict_params.contains("binary_fmt_str") &&
-        //       !dict_params["binary_fmt_str"].is_none()) {
-        //     std::string bfs_val =
-        //         dict_params["binary_fmt_str"].cast<std::string>();
-        //     if (init_param.binary_fmt_str != nullptr)
-        //       free(init_param.binary_fmt_str);
-        //     init_param.binary_fmt_str = strdup(bfs_val.c_str());
-        //     if (init_param.binary_fmt_str == nullptr && !bfs_val.empty()) {
-        //       throw std::runtime_error(
-        //           "Failed to allocate memory for binary_fmt_str from dict");
-        //     }
-        //   }
-        // } else if (!params.is_none()) {
-        //   // If using a reader_init_param_t object from Python, its members are
-        //   // already set via def_property (No need to copy here, just ensure
-        //   // it's reader_init_param_t object) If `params` is a
-        //   // `reader_init_param_t` object, Pybind11 will pass its fields
-        //   // directly We need to ensure that the `binary_fmt_str` member of
-        //   // `params` is correctly handled. The direct `getattr` below is for
-        //   // other fields, for binary_fmt_str, the `def_property` takes care.
-        //   init_param.time_field = py::getattr(params, "time_field").cast<int>();
-        //   init_param.obj_id_field =
-        //       py::getattr(params, "obj_id_field").cast<int>();
-        //   init_param.obj_size_field =
-        //       py::getattr(params, "obj_size_field").cast<int>();
-        //   init_param.delimiter =
-        //       py::getattr(params, "delimiter").cast<std::string>()[0];
-        //   init_param.has_header =
-        //       py::getattr(params, "has_header").cast<bool>();
-        //   // Handle binary_fmt_str if it's set on the Python object
-        //   if (py::hasattr(params, "binary_fmt_str") &&
-        //       !py::getattr(params, "binary_fmt_str").is_none()) {
-        //     std::string bfs_val =
-        //         py::getattr(params, "binary_fmt_str").cast<std::string>();
-        //     if (init_param.binary_fmt_str != nullptr)
-        //       free(init_param.binary_fmt_str);
-        //     init_param.binary_fmt_str = strdup(bfs_val.c_str());
-        //     if (init_param.binary_fmt_str == nullptr && !bfs_val.empty()) {
-        //       throw std::runtime_error(
-        //           "Failed to allocate memory for binary_fmt_str from object");
-        //     }
-        //   }
-        // }
         // ... (rest of open_trace function) ...
         reader_t* ptr = open_trace(
-            trace_path.c_str(), static_cast<trace_type_e>(type), &init_param);
+            trace_path.c_str(), type, &init_param);
         return std::unique_ptr<reader_t, ReaderDeleter>(ptr);
       },
       py::arg("trace_path"), py::arg("type"),
@@ -396,7 +341,7 @@ PYBIND11_MODULE(_libcachesim, m) {  // NOLINT(readability-named-parameter)
 
             Args:
                 trace_path (str): Path to the trace file.
-                type (int): Type of the trace (e.g., CSV_TRACE).
+                type (TraceType): Type of the trace (e.g., TraceType.CSV_TRACE).
                 ignore_obj_size (bool): Whether to ignore the object size.
 
             Returns:

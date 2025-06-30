@@ -12,7 +12,7 @@ echo "Building Python binding..."
 echo "Sync python version..."
 python scripts/sync_python_version.py
 pushd libCacheSim-python
-pip install -e . -vvv
+pip install -e . # -vvv
 popd
 
 # Test that the import works

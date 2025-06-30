@@ -25,7 +25,24 @@ libCacheSim Python bindings
     TraceType
 """
 
-from .const import TraceType
+import enum
+
+class TraceType(enum.Enum):
+    CSV_TRACE = 0
+    BIN_TRACE = 1
+    PLAIN_TXT_TRACE = 2
+    ORACLE_GENERAL_TRACE = 3
+    LCS_TRACE = 4 # libCacheSim format
+    VSCSI_TRACE = 5
+    TWR_TRACE = 6
+    TWRNS_TRACE = 7
+    ORACLE_SIM_TWR_TRACE = 8
+    ORACLE_SYS_TWR_TRACE = 9
+    ORACLE_SIM_TWRNS_TRACE = 10
+    ORACLE_SYS_TWRNS_TRACE = 11
+    VALPIN_TRACE = 12
+    UNKNOWN_TRACE = 13
+
 
 def open_trace(
     trace_path: str,
@@ -106,6 +123,19 @@ def TwoQ_init(
     Create a TwoQ cache instance.
     """
 
+
+def S4FIFO_init(
+    cache_size: int,
+    small_size_ratio: float = 0.10,
+    ghost_size_ratio: float = 0.90,
+    move_to_main_threshold: int = 2,
+    small_skip_ratio: float = 0
+) -> Cache:
+    """
+    Create a S4FIFO cache instance.
+    """
+
+
 class reader_init_param_t:
     time_field: int
     obj_id_field: int
@@ -137,3 +167,7 @@ class Reader:
     def get_wss(self, ignore_obj_size: bool = False) -> int: ...
     def __iter__(self) -> Reader: ...
     def __next__(self) -> Request: ...
+
+# -----------------------------
+def get_trace_file_lists(trace_set_name: str) -> list[str]: ...
+def get_trace_file_path(trace_file_name: str) -> str: ...

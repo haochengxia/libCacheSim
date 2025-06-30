@@ -7,6 +7,8 @@ file(WRITE "${EXPORT_FILE}" "")
 # Export project metadata
 # ==============================================================================
 file(APPEND "${EXPORT_FILE}" "set(LIBCACHESIM_VERSION \"${${PROJECT_NAME}_VERSION}\")\n")
+# options
+file(APPEND "${EXPORT_FILE}" "set(ENABLE_3L_CACHE \"${ENABLE_3L_CACHE}\")\n")
 
 # ==============================================================================
 # Export essential include directory variables

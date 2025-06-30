@@ -17,7 +17,7 @@ def mock_reader():
     )
     reader: Reader = open_trace(
         data_file,
-        type=TraceType.ORACLE_GENERAL_TRACE.value,
+        type=TraceType.ORACLE_GENERAL_TRACE,
     )
     try:
         yield reader
@@ -41,16 +41,9 @@ def mock_reader_without_obj_size():
     )
     reader: Reader = open_trace(
         data_file,
-        type=TraceType.ORACLE_GENERAL_TRACE.value,
+        type=TraceType.ORACLE_GENERAL_TRACE,
         ignore_obj_size=True)
     try:
         yield reader
     finally:
-        # More careful cleanup
-        try:
-            if hasattr(reader, 'close'):
-                reader.close()
-        except:
-            pass
-        # Don't explicitly del reader here, let Python handle it
         gc.collect()

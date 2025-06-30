@@ -138,6 +138,8 @@ static cache_obj_t *FIFO_find(cache_t *cache, const request_t *req,
 static cache_obj_t *FIFO_insert(cache_t *cache, const request_t *req) {
   FIFO_params_t *params = (FIFO_params_t *)cache->eviction_params;
   cache_obj_t *obj = cache_insert_base(cache, req);
+  obj->S4FIFO.freq = 0; // initialize frequency to 0
+  obj->S4FIFO.freq = req->freq; // copy frequency from request
   prepend_obj_to_head(&params->q_head, &params->q_tail, obj);
 
   return obj;

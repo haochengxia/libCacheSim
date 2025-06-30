@@ -10,7 +10,6 @@ from ._libcachesim import (
     process_trace,
     process_trace_python_hook,
 )
-from .const import TraceType
 from .eviction import (
     ARC,
     FIFO,
@@ -25,6 +24,9 @@ from .eviction import (
     PythonHookCachePolicy,
 )
 
+from .const import HF_CACHE_DIR
+from .dataset import get_trace_file_lists, get_trace_file_path
+
 __all__ = [
     "ARC",
     "FIFO",
@@ -35,6 +37,7 @@ __all__ = [
     "Clock",
     "Reader",
     "Request",
+    "S4FIFO",
     "Sieve",
     "ThreeLCache",
     "TinyLFU",

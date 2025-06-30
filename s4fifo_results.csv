@@ -1,0 +1,9 @@
+trace_name, cache_size_ratio, small_skip_ratio, move_to_main_threshold, fifo_size_ratio, additional_ghost_size_ratio, miss_ratio
+2021_cdn2/1M/cf_allcolo.ns10.oracleGeneral.zst, 0.01, 0, 1, 0.01, 0, 0.1202203705906868
+2021_cdn2/1M/cf_allcolo.ns10.oracleGeneral.zst, 0.01, 0, 1, 0.01, 1, 0.1232643723487854
+2021_cdn2/1M/cf_allcolo.ns10.oracleGeneral.zst, 0.01, 0, 2, 0.01, 0, 0.11976923048496246
+2021_cdn2/1M/cf_allcolo.ns10.oracleGeneral.zst, 0.01, 0, 2, 0.01, 1, 0.12293097376823425
+2021_cdn2/1M/cf_allcolo.ns10.oracleGeneral.zst, 0.1, 0, 1, 0.01, 0, 0.030289828777313232
+2021_cdn2/1M/cf_allcolo.ns10.oracleGeneral.zst, 0.1, 0, 1, 0.01, 1, 0.030874017626047134
+2021_cdn2/1M/cf_allcolo.ns10.oracleGeneral.zst, 0.1, 0, 2, 0.01, 0, 0.03018495813012123
+2021_cdn2/1M/cf_allcolo.ns10.oracleGeneral.zst, 0.1, 0, 2, 0.01, 1, 0.030813980847597122

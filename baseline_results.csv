@@ -1,0 +1,6 @@
+trace_name, cache_size_ratio, eviction_policy, miss_ratio
+2021_cdn2/1M/cf_allcolo.ns10.oracleGeneral.zst, LRU, 0.156601220369339
+2021_cdn2/1M/cf_allcolo.ns10.oracleGeneral.zst, ARC, 0.12629689276218414
+2021_cdn2/1M/cf_allcolo.ns10.oracleGeneral.zst, TwoQ, 0.13143764436244965
+2021_cdn2/1M/cf_allcolo.ns10.oracleGeneral.zst, ThreeLCache, 0.1151723861694336
+2021_cdn2/1M/cf_allcolo.ns10.oracleGeneral.zst, TinyLFU, 0.12132138758897781

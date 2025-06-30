@@ -1,5 +1,5 @@
 //
-//  This version (S3FIFO.c) differs from the original S3-FIFO (S3FIFOv0.c) in
+//  This version (S4FIFO.c) differs from the original S3-FIFO (S4FIFOv0.c) in
 //  that when the small queue is full, but the cache is not full, the original
 //  S3-FIFO will insert into the small queue, but this version will insert into
 //  the main queue. This version is in general better than the original S3-FIFO
@@ -22,7 +22,7 @@
 //          evict
 //
 //
-//  S3FIFO.c
+//  S4FIFO.c
 //  libCacheSim
 //
 //  Created by Juncheng on 12/4/24.
@@ -41,40 +41,45 @@ typedef struct {
   cache_t *ghost_fifo;
   cache_t *main_fifo;
   bool hit_on_ghost;
+  int hit_on_ghost_freq; // frequency of the object in ghost fifo
 
   int move_to_main_threshold;
   double small_size_ratio;
   double ghost_size_ratio;
+  double small_skip_ratio;
+  int ghost_to_main_threshold;
 
   bool has_evicted;
   request_t *req_local;
-} S3FIFO_params_t;
+
+  int64_t timer;
+} S4FIFO_params_t;
 
 static const char *DEFAULT_CACHE_PARAMS =
-    "small-size-ratio=0.10,ghost-size-ratio=0.90,move-to-main-threshold=2";
+    "small-size-ratio=0.10,ghost-size-ratio=0.90,move-to-main-threshold=2,small-skip-ratio=0,ghost-to-main-threshold=2";
 
 // ***********************************************************************
 // ****                                                               ****
 // ****                   function declarations                       ****
 // ****                                                               ****
 // ***********************************************************************
-static void S3FIFO_free(cache_t *cache);
-static bool S3FIFO_get(cache_t *cache, const request_t *req);
+static void S4FIFO_free(cache_t *cache);
+static bool S4FIFO_get(cache_t *cache, const request_t *req);
 
-static cache_obj_t *S3FIFO_find(cache_t *cache, const request_t *req,
+static cache_obj_t *S4FIFO_find(cache_t *cache, const request_t *req,
                                 const bool update_cache);
-static cache_obj_t *S3FIFO_insert(cache_t *cache, const request_t *req);
-static cache_obj_t *S3FIFO_to_evict(cache_t *cache, const request_t *req);
-static void S3FIFO_evict(cache_t *cache, const request_t *req);
-static bool S3FIFO_remove(cache_t *cache, const obj_id_t obj_id);
-static inline int64_t S3FIFO_get_occupied_byte(const cache_t *cache);
-static inline int64_t S3FIFO_get_n_obj(const cache_t *cache);
-static inline bool S3FIFO_can_insert(cache_t *cache, const request_t *req);
-static void S3FIFO_parse_params(cache_t *cache,
+static cache_obj_t *S4FIFO_insert(cache_t *cache, const request_t *req);
+static cache_obj_t *S4FIFO_to_evict(cache_t *cache, const request_t *req);
+static void S4FIFO_evict(cache_t *cache, const request_t *req);
+static bool S4FIFO_remove(cache_t *cache, const obj_id_t obj_id);
+static inline int64_t S4FIFO_get_occupied_byte(const cache_t *cache);
+static inline int64_t S4FIFO_get_n_obj(const cache_t *cache);
+static inline bool S4FIFO_can_insert(cache_t *cache, const request_t *req);
+static void S4FIFO_parse_params(cache_t *cache,
                                 const char *cache_specific_params);
 
-static void S3FIFO_evict_small(cache_t *cache, const request_t *req);
-static void S3FIFO_evict_main(cache_t *cache, const request_t *req);
+static void S4FIFO_evict_small(cache_t *cache, const request_t *req);
+static void S4FIFO_evict_main(cache_t *cache, const request_t *req);
 
 // ***********************************************************************
 // ****                                                               ****
@@ -82,33 +87,33 @@ static void S3FIFO_evict_main(cache_t *cache, const request_t *req);
 // ****                                                               ****
 // ***********************************************************************
 
-cache_t *S3FIFO_init(const common_cache_params_t ccache_params,
+cache_t *S4FIFO_init(const common_cache_params_t ccache_params,
                      const char *cache_specific_params) {
   cache_t *cache =
-      cache_struct_init("S3FIFO", ccache_params, cache_specific_params);
-  cache->cache_init = S3FIFO_init;
-  cache->cache_free = S3FIFO_free;
-  cache->get = S3FIFO_get;
-  cache->find = S3FIFO_find;
-  cache->insert = S3FIFO_insert;
-  cache->evict = S3FIFO_evict;
-  cache->remove = S3FIFO_remove;
-  cache->to_evict = S3FIFO_to_evict;
-  cache->get_n_obj = S3FIFO_get_n_obj;
-  cache->get_occupied_byte = S3FIFO_get_occupied_byte;
-  cache->can_insert = S3FIFO_can_insert;
+      cache_struct_init("S4FIFO", ccache_params, cache_specific_params);
+  cache->cache_init = S4FIFO_init;
+  cache->cache_free = S4FIFO_free;
+  cache->get = S4FIFO_get;
+  cache->find = S4FIFO_find;
+  cache->insert = S4FIFO_insert;
+  cache->evict = S4FIFO_evict;
+  cache->remove = S4FIFO_remove;
+  cache->to_evict = S4FIFO_to_evict;
+  cache->get_n_obj = S4FIFO_get_n_obj;
+  cache->get_occupied_byte = S4FIFO_get_occupied_byte;
+  cache->can_insert = S4FIFO_can_insert;
 
   cache->obj_md_size = 0;
 
-  cache->eviction_params = malloc(sizeof(S3FIFO_params_t));
-  memset(cache->eviction_params, 0, sizeof(S3FIFO_params_t));
-  S3FIFO_params_t *params = (S3FIFO_params_t *)cache->eviction_params;
+  cache->eviction_params = malloc(sizeof(S4FIFO_params_t));
+  memset(cache->eviction_params, 0, sizeof(S4FIFO_params_t));
+  S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
   params->req_local = new_request();
   params->hit_on_ghost = false;
 
-  S3FIFO_parse_params(cache, DEFAULT_CACHE_PARAMS);
+  S4FIFO_parse_params(cache, DEFAULT_CACHE_PARAMS);
   if (cache_specific_params != NULL) {
-    S3FIFO_parse_params(cache, cache_specific_params);
+    S4FIFO_parse_params(cache, cache_specific_params);
   }
 
   int64_t small_fifo_size =
@@ -134,8 +139,11 @@ cache_t *S3FIFO_init(const common_cache_params_t ccache_params,
   ccache_params_local.cache_size = main_fifo_size;
   params->main_fifo = FIFO_init(ccache_params_local, NULL);
 
-  snprintf(cache->cache_name, CACHE_NAME_ARRAY_LEN, "S3FIFO-%.4lf-%d",
+  snprintf(cache->cache_name, CACHE_NAME_ARRAY_LEN, "S4FIFO-%.4lf-%d",
            params->small_size_ratio, params->move_to_main_threshold);
+
+  /* S4FIFO: initialize the timer */
+  params->timer = 0;
 
   return cache;
 }
@@ -145,8 +153,8 @@ cache_t *S3FIFO_init(const common_cache_params_t ccache_params,
  *
  * @param cache
  */
-static void S3FIFO_free(cache_t *cache) {
-  S3FIFO_params_t *params = (S3FIFO_params_t *)cache->eviction_params;
+static void S4FIFO_free(cache_t *cache) {
+  S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
   free_request(params->req_local);
   params->small_fifo->cache_free(params->small_fifo);
   if (params->ghost_fifo != NULL) {
@@ -176,8 +184,9 @@ static void S3FIFO_free(cache_t *cache) {
  * @param req
  * @return true if cache hit, false if cache miss
  */
-static bool S3FIFO_get(cache_t *cache, const request_t *req) {
-  S3FIFO_params_t *params = (S3FIFO_params_t *)cache->eviction_params;
+static bool S4FIFO_get(cache_t *cache, const request_t *req) {
+  S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
+  params->timer++;
   DEBUG_ASSERT(params->small_fifo->get_occupied_byte(params->small_fifo) +
                    params->main_fifo->get_occupied_byte(params->main_fifo) <=
                cache->cache_size);
@@ -202,9 +211,9 @@ static bool S3FIFO_get(cache_t *cache, const request_t *req) {
  *  and if the object is expired, it is removed from the cache
  * @return the object or NULL if not found
  */
-static cache_obj_t *S3FIFO_find(cache_t *cache, const request_t *req,
+static cache_obj_t *S4FIFO_find(cache_t *cache, const request_t *req,
                                 const bool update_cache) {
-  S3FIFO_params_t *params = (S3FIFO_params_t *)cache->eviction_params;
+  S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
 
   // if update cache is false, we only check the fifo and main caches
   if (!update_cache) {
@@ -223,19 +232,38 @@ static cache_obj_t *S3FIFO_find(cache_t *cache, const request_t *req,
   params->hit_on_ghost = false;
   cache_obj_t *obj = params->small_fifo->find(params->small_fifo, req, true);
   if (obj != NULL) {
-    obj->S3FIFO.freq += 1;
+    /* S4FIFO: update the frequency */
+    if ((int64_t)(-obj->time_stamp + params->timer) >=
+        (int64_t)(params->small_skip_ratio * params->small_fifo->cache_size)) {
+      obj->S4FIFO.freq += 1;
+    }
     return obj;
   }
 
-  if (params->ghost_fifo != NULL &&
-      params->ghost_fifo->remove(params->ghost_fifo, req->obj_id)) {
+  // New logic:
+  // if the obj find in the ghost fifo, check the freq > thres then added to main
+  // otherwise just add freq
+  if (params->ghost_fifo != NULL && params->ghost_fifo->find(
+          params->ghost_fifo, req, false) != NULL) {
+    cache_obj_t *ghost_obj =
+        params->ghost_fifo->find(params->ghost_fifo, req, false);
+    int64_t ghost_freq = ghost_obj->S4FIFO.freq;
+    // printf("ghost_freq: %ld, threshold: %d\n", ghost_freq,
+    //        params->ghost_to_main_threshold);
+    
+    if (ghost_freq >= params->ghost_to_main_threshold-1) {
+      params->ghost_fifo->remove(params->ghost_fifo, req->obj_id);
+      params->hit_on_ghost = true;
+      params->hit_on_ghost_freq = ghost_freq;
+    } else {
+      ghost_obj->S4FIFO.freq = ghost_freq + 1;
+    }
     // if object in ghost_fifo, remove will return true
-    params->hit_on_ghost = true;
   }
 
   obj = params->main_fifo->find(params->main_fifo, req, true);
   if (obj != NULL) {
-    obj->S3FIFO.freq += 1;
+    obj->S4FIFO.freq += 1;
   }
 
   return obj;
@@ -252,16 +280,18 @@ static cache_obj_t *S3FIFO_find(cache_t *cache, const request_t *req,
  * @param req
  * @return the inserted object
  */
-static cache_obj_t *S3FIFO_insert(cache_t *cache, const request_t *req) {
-  S3FIFO_params_t *params = (S3FIFO_params_t *)cache->eviction_params;
+static cache_obj_t *S4FIFO_insert(cache_t *cache, const request_t *req) {
+  S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
   cache_obj_t *obj = NULL;
 
   cache_t *small = params->small_fifo;
   cache_t *main = params->main_fifo;
+  bool from_ghost = params->hit_on_ghost;
 
-  if (params->hit_on_ghost) {
+    if (params->hit_on_ghost) {
     /* insert into main FIFO */
     params->hit_on_ghost = false;
+    params->hit_on_ghost_freq = 0;
     obj = main->insert(main, req);
   } else {
     /* insert into small fifo */
@@ -277,7 +307,15 @@ static cache_obj_t *S3FIFO_insert(cache_t *cache, const request_t *req) {
     }
   }
 
-  obj->S3FIFO.freq = 0;
+  obj->S4FIFO.freq = 0;
+  if (!from_ghost) obj->S4FIFO.freq = params->move_to_main_threshold / 2;
+  else {
+    // if the object is from ghost, we set the frequency to the frequency of the
+    // object in ghost fifo
+    obj->S4FIFO.freq = params->move_to_main_threshold / 2;
+  }
+  /* S4FIFO: set the time stamp */
+  obj->time_stamp = params->timer;
 
   return obj;
 }
@@ -292,13 +330,13 @@ static cache_obj_t *S3FIFO_insert(cache_t *cache, const request_t *req) {
  * @param cache the cache
  * @return the object to be evicted
  */
-static cache_obj_t *S3FIFO_to_evict(cache_t *cache, const request_t *req) {
+static cache_obj_t *S4FIFO_to_evict(cache_t *cache, const request_t *req) {
   assert(false);
   return NULL;
 }
 
-static void S3FIFO_evict_small(cache_t *cache, const request_t *req) {
-  S3FIFO_params_t *params = (S3FIFO_params_t *)cache->eviction_params;
+static void S4FIFO_evict_small(cache_t *cache, const request_t *req) {
+  S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
   cache_t *small = params->small_fifo;
   cache_t *ghost = params->ghost_fifo;
   cache_t *main = params->main_fifo;
@@ -310,11 +348,12 @@ static void S3FIFO_evict_small(cache_t *cache, const request_t *req) {
     // need to copy the object before it is evicted
     copy_cache_obj_to_request(params->req_local, obj_to_evict);
 
-    if (obj_to_evict->S3FIFO.freq >= params->move_to_main_threshold) {
+    if (obj_to_evict->S4FIFO.freq >= params->move_to_main_threshold) {
       main->insert(main, params->req_local);
     } else {
       // insert to ghost
       if (ghost != NULL) {
+        params->req_local->freq = obj_to_evict->S4FIFO.freq;
         ghost->get(ghost, params->req_local);
       }
       has_evicted = true;
@@ -326,15 +365,15 @@ static void S3FIFO_evict_small(cache_t *cache, const request_t *req) {
   }
 }
 
-static void S3FIFO_evict_main(cache_t *cache, const request_t *req) {
-  S3FIFO_params_t *params = (S3FIFO_params_t *)cache->eviction_params;
+static void S4FIFO_evict_main(cache_t *cache, const request_t *req) {
+  S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
   cache_t *main = params->main_fifo;
 
   bool has_evicted = false;
   while (!has_evicted && main->get_occupied_byte(main) > 0) {
     cache_obj_t *obj_to_evict = main->to_evict(main, req);
     DEBUG_ASSERT(obj_to_evict != NULL);
-    int freq = obj_to_evict->S3FIFO.freq;
+    int freq = obj_to_evict->S4FIFO.freq;
     copy_cache_obj_to_request(params->req_local, obj_to_evict);
     if (freq >= 1) {
       // we need to evict first because the object to insert has the same obj_id
@@ -342,8 +381,8 @@ static void S3FIFO_evict_main(cache_t *cache, const request_t *req) {
       obj_to_evict = NULL;
 
       cache_obj_t *new_obj = main->insert(main, params->req_local);
-      // clock with 2-bit counter -> 4-bit
-      new_obj->S3FIFO.freq = MIN(freq, 15) - 1;
+      // clock with 2-bit counter
+      new_obj->S4FIFO.freq = MIN(freq, 3) - 1;
 
     } else {
       bool removed = main->remove(main, obj_to_evict->obj_id);
@@ -363,8 +402,8 @@ static void S3FIFO_evict_main(cache_t *cache, const request_t *req) {
  * @param req not used
  * @param evicted_obj if not NULL, return the evicted object to caller
  */
-static void S3FIFO_evict(cache_t *cache, const request_t *req) {
-  S3FIFO_params_t *params = (S3FIFO_params_t *)cache->eviction_params;
+static void S4FIFO_evict(cache_t *cache, const request_t *req) {
+  S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
   params->has_evicted = true;
 
   cache_t *small = params->small_fifo;
@@ -372,9 +411,9 @@ static void S3FIFO_evict(cache_t *cache, const request_t *req) {
 
   if (main->get_occupied_byte(main) > main->cache_size ||
       small->get_occupied_byte(small) == 0) {
-    S3FIFO_evict_main(cache, req);
+    S4FIFO_evict_main(cache, req);
   } else {
-    S3FIFO_evict_small(cache, req);
+    S4FIFO_evict_small(cache, req);
   }
 }
 
@@ -391,8 +430,8 @@ static void S3FIFO_evict(cache_t *cache, const request_t *req) {
  * @return true if the object is removed, false if the object is not in the
  * cache
  */
-static bool S3FIFO_remove(cache_t *cache, const obj_id_t obj_id) {
-  S3FIFO_params_t *params = (S3FIFO_params_t *)cache->eviction_params;
+static bool S4FIFO_remove(cache_t *cache, const obj_id_t obj_id) {
+  S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
   bool removed = false;
   removed = removed || params->small_fifo->remove(params->small_fifo, obj_id);
   removed = removed || (params->ghost_fifo &&
@@ -402,20 +441,20 @@ static bool S3FIFO_remove(cache_t *cache, const obj_id_t obj_id) {
   return removed;
 }
 
-static inline int64_t S3FIFO_get_occupied_byte(const cache_t *cache) {
-  S3FIFO_params_t *params = (S3FIFO_params_t *)cache->eviction_params;
+static inline int64_t S4FIFO_get_occupied_byte(const cache_t *cache) {
+  S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
   return params->small_fifo->get_occupied_byte(params->small_fifo) +
          params->main_fifo->get_occupied_byte(params->main_fifo);
 }
 
-static inline int64_t S3FIFO_get_n_obj(const cache_t *cache) {
-  S3FIFO_params_t *params = (S3FIFO_params_t *)cache->eviction_params;
+static inline int64_t S4FIFO_get_n_obj(const cache_t *cache) {
+  S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
   return params->small_fifo->get_n_obj(params->small_fifo) +
          params->main_fifo->get_n_obj(params->main_fifo);
 }
 
-static inline bool S3FIFO_can_insert(cache_t *cache, const request_t *req) {
-  S3FIFO_params_t *params = (S3FIFO_params_t *)cache->eviction_params;
+static inline bool S4FIFO_can_insert(cache_t *cache, const request_t *req) {
+  S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
 
   return req->obj_size <= params->small_fifo->cache_size &&
          cache_can_insert_default(cache, req);
@@ -426,7 +465,7 @@ static inline bool S3FIFO_can_insert(cache_t *cache, const request_t *req) {
 // ****                parameter set up functions                     ****
 // ****                                                               ****
 // ***********************************************************************
-static const char *S3FIFO_current_params(S3FIFO_params_t *params) {
+static const char *S4FIFO_current_params(S4FIFO_params_t *params) {
   static __thread char params_str[128];
   snprintf(params_str, 128,
            "small-size-ratio=%.4lf,ghost-size-ratio=%.4lf,move-to-main-"
@@ -436,9 +475,9 @@ static const char *S3FIFO_current_params(S3FIFO_params_t *params) {
   return params_str;
 }
 
-static void S3FIFO_parse_params(cache_t *cache,
+static void S4FIFO_parse_params(cache_t *cache,
                                 const char *cache_specific_params) {
-  S3FIFO_params_t *params = (S3FIFO_params_t *)(cache->eviction_params);
+  S4FIFO_params_t *params = (S4FIFO_params_t *)(cache->eviction_params);
 
   char *params_str = strdup(cache_specific_params);
   char *old_params_str = params_str;
@@ -461,8 +500,12 @@ static void S3FIFO_parse_params(cache_t *cache,
       params->ghost_size_ratio = strtod(value, NULL);
     } else if (strcasecmp(key, "move-to-main-threshold") == 0) {
       params->move_to_main_threshold = atoi(value);
+    } else if (strcasecmp(key, "small-skip-ratio") == 0) {
+      params->small_skip_ratio = strtod(value, NULL);
+    } else if (strcasecmp(key, "ghost-to-main-threshold") == 0) {
+      params->ghost_to_main_threshold = atoi(value);
     } else if (strcasecmp(key, "print") == 0) {
-      printf("parameters: %s\n", S3FIFO_current_params(params));
+      printf("parameters: %s\n", S4FIFO_current_params(params));
       exit(0);
     } else {
       ERROR("%s does not have parameter %s\n", cache->cache_name, key);

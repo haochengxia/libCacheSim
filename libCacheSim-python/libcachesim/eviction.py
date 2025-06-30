@@ -201,7 +201,7 @@ class LRB(EvictionPolicy):
 
     Args:
         cache_size: Size of the cache
-        objective: Objective function to optimize (default: "byte-miss-ratio")
+        objective: Objective function to optimize, can be "byte-miss-ratio" or "object-miss-ratio" (default: "byte-miss-ratio")
     """
     def __init__(self, cache_size: int, objective: str = "byte-miss-ratio"):
         super().__init__(cache_size, objective=objective)
@@ -209,8 +209,8 @@ class LRB(EvictionPolicy):
     def init_cache(self, cache_size: int, **kwargs) -> Cache:
         objective = kwargs.get('objective', "byte-miss-ratio")
 
-        if objective not in ["byte-miss-ratio", "byte-hit-ratio"]:
-            msg = "objective must be either 'byte-miss-ratio' or 'byte-hit-ratio'"
+        if objective not in ["byte-miss-ratio", "object-miss-ratio"]:
+            msg = "objective must be either 'byte-miss-ratio' or 'object-miss-ratio'"
             raise ValueError(msg)
 
         self.objective = objective
@@ -313,7 +313,7 @@ class ThreeLCache(EvictionPolicy):
 
     Args:
         cache_size: Size of the cache
-        objective: Objective function to optimize (default: "byte-miss-ratio")
+        objective: Objective function to optimize, can be "byte-miss-ratio" or "object-miss-ratio" (default: "byte-miss-ratio")
     """
     def __init__(self, cache_size: int, objective: str = "byte-miss-ratio"):
         super().__init__(cache_size, objective=objective)
@@ -321,8 +321,8 @@ class ThreeLCache(EvictionPolicy):
     def init_cache(self, cache_size: int, **kwargs):
         objective = kwargs.get('objective', "byte-miss-ratio")
 
-        if objective not in ["byte-miss-ratio", "byte-hit-ratio"]:
-            msg = "objective must be either 'byte-miss-ratio' or 'byte-hit-ratio'"
+        if objective not in ["byte-miss-ratio", "object-miss-ratio"]:
+            msg = "objective must be either 'byte-miss-ratio' or 'object-miss-ratio'"
             raise ValueError(msg)
 
         self.objective = objective

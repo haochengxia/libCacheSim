@@ -38,6 +38,11 @@ else()
     add_compile_definitions(LOGLEVEL=7)
 endif()
 
+# optional algos
+if(ENABLE_3L_CACHE)
+    add_compile_definitions(ENABLE_3L_CACHE=1)
+endif()
+
 # Find python and pybind11
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
 find_package(pybind11 CONFIG REQUIRED)

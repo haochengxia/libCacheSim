@@ -7,6 +7,6 @@ DIR=$(dirname "${SOURCE}")
 cd "${DIR}"/../
 mkdir -p _build
 cd _build
-cmake -G Ninja ..
+cmake -G Ninja .. -DENABLE_LRB=ON
 ninja
 cd "${DIR}"

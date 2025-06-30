@@ -69,6 +69,9 @@ typedef struct request {
   int32_t n_features;
   int32_t features[N_MAX_FEATURES];
 
+  /* Added by haocheng */
+  int64_t freq; /* used by some algorithms to track frequency */
+
 } request_t;
 
 /**
