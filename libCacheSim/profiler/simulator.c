@@ -13,6 +13,9 @@ extern "C" {
 #include "libCacheSim/simulator.h"
 
 #include <math.h>
+#ifdef __GLIBC__
+#include <malloc.h>  // for malloc_trim
+#endif
 
 #include "../cache/cacheUtils.h"
 #include "../utils/include/myprint.h"
@@ -142,6 +145,11 @@ static void _simulate(gpointer data, gpointer user_data) {
   }
   free_request(req);
   close_reader(cloned_reader);
+
+  // release memory to the system
+  #ifdef __GLIBC__
+  malloc_trim(0);
+  #endif
 }
 
 cache_stat_t *simulate_at_multi_sizes_with_step_size(
