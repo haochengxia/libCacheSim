@@ -52,13 +52,24 @@ hit = cache.get(req)  # True (second access)
 print(f"Hit rate: {(cache.n_req - cache.n_miss)/cache.n_req:.2%}")
 ```
 
+### Trace reading
+
+```python
+import libcachesim as lcs
+
+# Open trace and process efficiently
+reader = lcs.open_trace("./data/cloudPhysicsIO.oracleGeneral.bin", lcs.TraceType.ORACLE_GENERAL_TRACE)
+for idx, req in enumerate(reader):
+    print(f"req {idx}: obj_id {req.obj_id}, obj_size {req.obj_size}")
+```
+
 ### Trace Processing
 
 ```python
 import libcachesim as lcs
 
 # Open trace and process efficiently
-reader = lcs.open_trace("trace.bin", lcs.TraceType.ORACLE_GENERAL_TRACE.value)
+reader = lcs.open_trace("./data/cloudPhysicsIO.oracleGeneral.bin", lcs.TraceType.ORACLE_GENERAL_TRACE)
 cache = lcs.S3FIFO(cache_size=1024*1024)
 
 # Process entire trace efficiently (C++ backend)
@@ -216,7 +227,7 @@ hit = lru_cache.get(req)
 import libcachesim as lcs
 
 def compare_algorithms(trace_path):
-    reader = lcs.open_trace(trace_path, lcs.TraceType.VSCSI_TRACE.value)
+    reader = lcs.open_trace(trace_path, lcs.TraceType.VSCSI_TRACE)
     algorithms = ['LRU', 'S3FIFO', 'Sieve', 'ARC']
 
     print("Algorithm\tMiss Ratio")
@@ -302,14 +313,14 @@ import libcachesim as lcs
 
 # Supported trace types
 trace_types = {
-    "oracle": lcs.TraceType.ORACLE_GENERAL_TRACE.value,
-    "csv": lcs.TraceType.CSV_TRACE.value,
-    "vscsi": lcs.TraceType.VSCSI_TRACE.value,
-    "txt": lcs.TraceType.TXT_TRACE.value
+    "oracle": lcs.TraceType.ORACLE_GENERAL_TRACE,
+    "csv": lcs.TraceType.CSV_TRACE,
+    "vscsi": lcs.TraceType.VSCSI_TRACE,
+    "txt": lcs.TraceType.TXT_TRACE
 }
 
 # Open different trace formats
-oracle_reader = lcs.open_trace("trace.bin", trace_types["oracle"])
+oracle_reader = lcs.open_trace("./data/cloudPhysicsIO.oracleGeneral.bin", trace_types["oracle"])
 csv_reader = lcs.open_trace("trace.csv", trace_types["csv"],
                            "time-col=1,obj-id-col=2,obj-size-col=3,delimiter=,")
 
@@ -418,7 +429,7 @@ req.op = 1              # Operation type (optional, default=1)
 hit = cache.get(req)    # Process single request - returns True if hit, False if miss
 
 # Batch processing (faster for large traces)
-reader = lcs.open_trace("trace.bin", lcs.TraceType.ORACLE_GENERAL_TRACE.value)
+reader = lcs.open_trace("./data/cloudPhysicsIO.oracleGeneral.bin", lcs.TraceType.ORACLE_GENERAL_TRACE)
 miss_ratio = cache.process_trace(reader, max_req=10000)
 
 # Unified properties for all caches:
@@ -436,7 +447,7 @@ print(f"Hit rate: {(cache.n_req - cache.n_miss) / cache.n_req:.2%}")
 # Open trace with specific format
 reader = lcs.open_trace(
     trace_path="trace.csv",
-    trace_type=lcs.TraceType.CSV_TRACE.value,
+    trace_type=lcs.TraceType.CSV_TRACE,
     trace_type_params="time-col=1,obj-id-col=2,obj-size-col=3,delimiter=,"
 )
 
@@ -453,17 +464,17 @@ miss_ratio = cache.process_trace(
 ### Supported Trace Formats
 ```python
 # Oracle format (binary, fastest)
-reader = lcs.open_trace("trace.bin", lcs.TraceType.ORACLE_GENERAL_TRACE.value)
+reader = lcs.open_trace("./data/cloudPhysicsIO.oracleGeneral.bin", lcs.TraceType.ORACLE_GENERAL_TRACE)
 
 # CSV format with custom parameters
-reader = lcs.open_trace("trace.csv", lcs.TraceType.CSV_TRACE.value,
+reader = lcs.open_trace("trace.csv", lcs.TraceType.CSV_TRACE,
                        "time-col=1,obj-id-col=2,obj-size-col=3,delimiter=,")
 
 # VSCSI format
-reader = lcs.open_trace("trace.vscsi", lcs.TraceType.VSCSI_TRACE.value)
+reader = lcs.open_trace("trace.vscsi", lcs.TraceType.VSCSI_TRACE)
 
 # Plain text format
-reader = lcs.open_trace("trace.txt", lcs.TraceType.TXT_TRACE.value)
+reader = lcs.open_trace("trace.txt", lcs.TraceType.TXT_TRACE)
 ```
 
 ### Python Hook Cache Reference

@@ -289,7 +289,7 @@ PYBIND11_MODULE(_libcachesim, m) {  // NOLINT(readability-named-parameter)
    */
   m.def(
       "open_trace",
-      [](const std::string& trace_path, int type, const py::object& params) {
+      [](const std::string& trace_path, trace_type_e type, const py::object& params) {
         // Create an init_param instance, it will be populated from Python
         reader_init_param_t init_param = {};
 
@@ -354,7 +354,7 @@ PYBIND11_MODULE(_libcachesim, m) {  // NOLINT(readability-named-parameter)
         }
         // ... (rest of open_trace function) ...
         reader_t* ptr = open_trace(
-            trace_path.c_str(), static_cast<trace_type_e>(type), &init_param);
+            trace_path.c_str(), type, &init_param);
         return std::unique_ptr<reader_t, ReaderDeleter>(ptr);
       },
       py::arg("trace_path"), py::arg("type"),
@@ -364,7 +364,7 @@ PYBIND11_MODULE(_libcachesim, m) {  // NOLINT(readability-named-parameter)
 
             Args:
                 trace_path (str): Path to the trace file.
-                type (int): Type of the trace (e.g., CSV_TRACE).
+                type (trace_type_e): Type of the trace (e.g., CSV_TRACE).
                 reader_init_param (Union[dict, reader_init_param_t, None]): Initialization parameters for the reader.
 
             Returns:
