@@ -175,6 +175,9 @@ typedef struct cache_obj {
   // used by belady related algorithms
   misc_metadata_t misc;
 
+  /* Added by haocheng */
+  int64_t time_stamp;  // used by S4FIFO
+
   union {
     LFU_obj_metadata_t lfu;            // for LFU
     Clock_obj_metadata_t clock;        // for Clock
