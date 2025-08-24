@@ -324,7 +324,7 @@ static void S4FIFO_evict_small(cache_t *cache, const request_t *req) {
     } else {
       // insert to ghost
       if (ghost != NULL) {
-        small_freq = obj_to_evict->S4FIFO.freq;
+        int64_t small_freq = obj_to_evict->S4FIFO.freq;
         ghost->get(ghost, params->req_local);
         // let the obj inherit the freq from small fifo (exact value)
         cache_obj_t *ghost_obj = ghost->find(ghost, params->req_local, false);
