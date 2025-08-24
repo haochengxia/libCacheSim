@@ -133,6 +133,12 @@ typedef struct {
 } S3FIFO_obj_metadata_t;
 
 typedef struct {
+  int64_t insertion_time;
+  int64_t freq;
+  int32_t main_insert_freq;
+} S4FIFO_obj_metadata_t;
+
+typedef struct {
   // int32_t freq;
   int lru_id;
   bool reference;
