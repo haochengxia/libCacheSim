@@ -36,7 +36,7 @@ typedef struct {
 } S4FIFO_params_t;
 
 static const char *DEFAULT_CACHE_PARAMS =
-    "small-size-ratio=0.10,ghost-size-ratio=0.90,move-to-main-threshold=2,small-skip-ratio=0,ghost-to-main-threshold=2";
+    "small-size-ratio=0.10,ghost-size-ratio=0.90,move-to-main-threshold=2,small-skip-ratio=0,ghost-to-main-threshold=0";
 
 // ***********************************************************************
 // ****                                                               ****
