@@ -1,8 +1,9 @@
 //
 // This version (S4FIFO.c) is for cache miss ratio comparison only.
-// Since we need different combinations of parameters to achieve the best miss ratio.
-// And the number of combinations is large, therefore, it is performance-sensitive.
-// It will not gather other statistics information like hit position or others.
+// Since we need different combinations of parameters to achieve the best miss
+// ratio. And the number of combinations is large, therefore, it is
+// performance-sensitive. It will not gather other statistics information like
+// hit position or others.
 //
 //  S4FIFO.c
 //  libCacheSim
@@ -21,7 +22,7 @@ typedef struct {
   cache_t *ghost_fifo;
   cache_t *main_fifo;
   bool hit_on_ghost;
-  int hit_on_ghost_freq; // frequency of the object in ghost fifo
+  int hit_on_ghost_freq;  // frequency of the object in ghost fifo
 
   int move_to_main_threshold;
   double small_size_ratio;
@@ -32,11 +33,12 @@ typedef struct {
   bool has_evicted;
   request_t *req_local;
 
-  int64_t timer; // is used for small skip logic
+  int64_t timer;  // is used for small skip logic
 } S4FIFO_params_t;
 
 static const char *DEFAULT_CACHE_PARAMS =
-    "small-size-ratio=0.10,ghost-size-ratio=0.90,move-to-main-threshold=2,small-skip-ratio=0,ghost-to-main-threshold=0";
+    "small-size-ratio=0.10,ghost-size-ratio=0.90,move-to-main-threshold=2,"
+    "small-skip-ratio=0,ghost-to-main-threshold=0";
 
 // ***********************************************************************
 // ****                                                               ****
@@ -220,10 +222,10 @@ static cache_obj_t *S4FIFO_find(cache_t *cache, const request_t *req,
   }
 
   // New logic:
-  // if the obj find in the ghost fifo, check the freq > thres then added to main
-  // otherwise just add freq
-  if (params->ghost_fifo != NULL && params->ghost_fifo->find(
-          params->ghost_fifo, req, false) != NULL) {
+  // if the obj find in the ghost fifo, check the freq > thres then added to
+  // main otherwise just add freq
+  if (params->ghost_fifo != NULL &&
+      params->ghost_fifo->find(params->ghost_fifo, req, false) != NULL) {
     cache_obj_t *ghost_obj =
         params->ghost_fifo->find(params->ghost_fifo, req, false);
     int64_t ghost_freq = ghost_obj->S4FIFO.freq;
@@ -264,7 +266,7 @@ static cache_obj_t *S4FIFO_insert(cache_t *cache, const request_t *req) {
   cache_t *small = params->small_fifo;
   cache_t *main = params->main_fifo;
 
-    if (params->hit_on_ghost) {
+  if (params->hit_on_ghost) {
     /* insert into main FIFO */
     params->hit_on_ghost = false;
     params->hit_on_ghost_freq = 0;
@@ -280,7 +282,7 @@ static cache_obj_t *S4FIFO_insert(cache_t *cache, const request_t *req) {
       obj = main->insert(main, req);
     } else {
       obj = small->insert(small, req);
-      params->timer++; // only increase timer when insert into small fifo
+      params->timer++;  // only increase timer when insert into small fifo
       obj->time_stamp = params->timer;
     }
   }
