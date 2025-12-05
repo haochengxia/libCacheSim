@@ -22,8 +22,11 @@ typedef struct {
   cache_t *ghost_fifo;
   cache_t *main_fifo;
   bool hit_on_ghost;
-  int hit_on_ghost_freq;  // frequency of the object in ghost fifo
 
+  bool collect_features;  // whether to collect features for learning-based cache
+                         // replacement, False by default
+
+  int hit_on_ghost_freq;  // frequency of the object in ghost fifo
   int move_to_main_threshold;
   double small_size_ratio;
   double ghost_size_ratio;
@@ -33,7 +36,7 @@ typedef struct {
   bool has_evicted;
   request_t *req_local;
 
-  int64_t timer;  // is used for small skip logic
+  int64_t s_counter;  // is used for small skip logic
 } S4FIFO_params_t;
 
 static const char *DEFAULT_CACHE_PARAMS =
@@ -124,8 +127,8 @@ cache_t *S4FIFO_init(const common_cache_params_t ccache_params,
   snprintf(cache->cache_name, CACHE_NAME_ARRAY_LEN, "S4FIFO-%.4lf-%d",
            params->small_size_ratio, params->move_to_main_threshold);
 
-  /* S4FIFO: initialize the timer */
-  params->timer = 0;
+  /* S4FIFO: initialize the s_counter, since no obj enter small queue -> 0 */
+  params->s_counter = 0;
 
   return cache;
 }
@@ -214,7 +217,7 @@ static cache_obj_t *S4FIFO_find(cache_t *cache, const request_t *req,
   cache_obj_t *obj = params->small_fifo->find(params->small_fifo, req, true);
   if (obj != NULL) {
     /* S4FIFO: update the frequency */
-    if ((int64_t)(-obj->time_stamp + params->timer) >=
+    if ((int64_t)(-obj->time_stamp + params->s_counter) >=
         (int64_t)(params->small_skip_ratio * params->small_fifo->cache_size)) {
       obj->S4FIFO.freq += 1;
     }
@@ -282,8 +285,8 @@ static cache_obj_t *S4FIFO_insert(cache_t *cache, const request_t *req) {
       obj = main->insert(main, req);
     } else {
       obj = small->insert(small, req);
-      params->timer++;  // only increase timer when insert into small fifo
-      obj->time_stamp = params->timer;
+      params->s_counter++;  // only increase s_counter when insert into small fifo
+      obj->time_stamp = params->s_counter;
     }
   }
 
