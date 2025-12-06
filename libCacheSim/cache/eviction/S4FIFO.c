@@ -17,14 +17,25 @@
 extern "C" {
 #endif
 
+// Simulation phases for S4FIFO
+typedef enum {
+  S4FIFO_PHASE_WARMUP = 0,       // Phase 1: Warm-up phase
+  S4FIFO_PHASE_FEATURE_COLLECT,  // Phase 2: Feature collection phase
+  S4FIFO_PHASE_PREDICTION        // Phase 3: Feature prediction and run phase
+} S4FIFO_phase_t;
+
+// Callback function type for phase transition
+typedef void (*S4FIFO_phase_callback_t)(void *cache, S4FIFO_phase_t old_phase,
+                                        S4FIFO_phase_t new_phase);
+
 typedef struct {
   cache_t *small_fifo;
   cache_t *ghost_fifo;
   cache_t *main_fifo;
   bool hit_on_ghost;
 
-  bool collect_features;  // whether to collect features for learning-based cache
-                         // replacement, False by default
+  bool collect_features;  // whether to collect features for learning-based
+                          // cache replacement, False by default
 
   int hit_on_ghost_freq;  // frequency of the object in ghost fifo
   int move_to_main_threshold;
@@ -37,11 +48,19 @@ typedef struct {
   request_t *req_local;
 
   int64_t s_counter;  // is used for small skip logic
+
+  // ==== Three-phase simulation control ====
+  S4FIFO_phase_t current_phase;  // Current simulation phase
+  int64_t feature_collect_reqs;  // Number of requests for feature collection
+  int64_t warmup_end_n_req;      // n_req when warmup ended (for tracking)
+  S4FIFO_phase_callback_t
+      phase_callback;        // Optional callback when phase changes
+  void *callback_user_data;  // User data passed to callback
 } S4FIFO_params_t;
 
 static const char *DEFAULT_CACHE_PARAMS =
     "small-size-ratio=0.10,ghost-size-ratio=0.90,move-to-main-threshold=2,"
-    "small-skip-ratio=0,ghost-to-main-threshold=0";
+    "small-skip-ratio=0,ghost-to-main-threshold=0,feature-collect-reqs=10000";
 
 // ***********************************************************************
 // ****                                                               ****
@@ -130,6 +149,13 @@ cache_t *S4FIFO_init(const common_cache_params_t ccache_params,
   /* S4FIFO: initialize the s_counter, since no obj enter small queue -> 0 */
   params->s_counter = 0;
 
+  /* Initialize three-phase simulation control */
+  params->current_phase = S4FIFO_PHASE_WARMUP;
+  /* params->feature_collect_reqs is initialized by S4FIFO_parse_params */
+  params->warmup_end_n_req = 0;
+  params->phase_callback = NULL;
+  params->callback_user_data = NULL;
+
   return cache;
 }
 
@@ -174,6 +200,38 @@ static bool S4FIFO_get(cache_t *cache, const request_t *req) {
   DEBUG_ASSERT(params->small_fifo->get_occupied_byte(params->small_fifo) +
                    params->main_fifo->get_occupied_byte(params->main_fifo) <=
                cache->cache_size);
+
+  /* Three-phase simulation: check and update phase based on n_req */
+  if (params->feature_collect_reqs > 0) {
+    int64_t n_req = cache->n_req;
+    S4FIFO_phase_t old_phase = params->current_phase;
+    S4FIFO_phase_t new_phase = old_phase;
+
+    /* Phase transition boundaries:
+     * - Warmup: fill the cache (determined by occupied_byte >= cache_size)
+     * - Feature collection: after warmup, next <feature_collect_reqs> requests
+     * - Prediction: remaining requests */
+    if (old_phase == S4FIFO_PHASE_WARMUP) {
+      /* Transition to feature collection when cache is warmed up */
+      if (cache->get_occupied_byte(cache) >= cache->cache_size) {
+        new_phase = S4FIFO_PHASE_FEATURE_COLLECT;
+        params->warmup_end_n_req = n_req;  // Record when warmup ended
+      }
+    } else if (old_phase == S4FIFO_PHASE_FEATURE_COLLECT) {
+      /* Transition to prediction after collecting enough requests */
+      if ((n_req - params->warmup_end_n_req) >= params->feature_collect_reqs) {
+        new_phase = S4FIFO_PHASE_PREDICTION;
+      }
+    }
+
+    /* Trigger callback if phase changed */
+    if (new_phase != old_phase) {
+      params->current_phase = new_phase;
+      if (params->phase_callback != NULL) {
+        params->phase_callback(cache, old_phase, new_phase);
+      }
+    }
+  }
 
   bool cache_hit = cache_get_base(cache, req);
 
@@ -285,7 +343,8 @@ static cache_obj_t *S4FIFO_insert(cache_t *cache, const request_t *req) {
       obj = main->insert(main, req);
     } else {
       obj = small->insert(small, req);
-      params->s_counter++;  // only increase s_counter when insert into small fifo
+      params
+          ->s_counter++;  // only increase s_counter when insert into small fifo
       obj->time_stamp = params->s_counter;
     }
   }
@@ -485,6 +544,8 @@ static void S4FIFO_parse_params(cache_t *cache,
       params->small_skip_ratio = strtod(value, NULL);
     } else if (strcasecmp(key, "ghost-to-main-threshold") == 0) {
       params->ghost_to_main_threshold = atoi(value);
+    } else if (strcasecmp(key, "feature-collect-reqs") == 0) {
+      params->feature_collect_reqs = strtoll(value, NULL, 10);
     } else if (strcasecmp(key, "print") == 0) {
       printf("parameters: %s\n", S4FIFO_current_params(params));
       exit(0);
@@ -495,6 +556,82 @@ static void S4FIFO_parse_params(cache_t *cache,
   }
 
   free(old_params_str);
+}
+
+// ***********************************************************************
+// ****                                                               ****
+// ****               Three-phase simulation API                      ****
+// ****                                                               ****
+// ***********************************************************************
+
+/**
+ * @brief Set the number of requests for feature collection phase
+ *
+ * @param cache the cache
+ * @param n_reqs number of requests for feature collection
+ */
+void S4FIFO_set_feature_collect_reqs(cache_t *cache, int64_t n_reqs) {
+  S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
+  params->feature_collect_reqs = n_reqs;
+}
+
+/**
+ * @brief Register a callback for phase transitions
+ *
+ * @param cache the cache
+ * @param callback callback function to be called on phase change
+ * @param user_data user data passed to callback
+ */
+void S4FIFO_set_phase_callback(cache_t *cache, S4FIFO_phase_callback_t callback,
+                               void *user_data) {
+  S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
+  params->phase_callback = callback;
+  params->callback_user_data = user_data;
+}
+
+/**
+ * @brief Get the current simulation phase
+ *
+ * @param cache the cache
+ * @return current phase
+ */
+S4FIFO_phase_t S4FIFO_get_current_phase(cache_t *cache) {
+  S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
+  return params->current_phase;
+}
+
+/**
+ * @brief Manually set the simulation phase (useful for testing)
+ *
+ * @param cache the cache
+ * @param phase the new phase
+ */
+void S4FIFO_set_phase(cache_t *cache, S4FIFO_phase_t phase) {
+  S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
+  S4FIFO_phase_t old_phase = params->current_phase;
+  params->current_phase = phase;
+  if (params->phase_callback != NULL && old_phase != phase) {
+    params->phase_callback(cache, old_phase, phase);
+  }
+}
+
+/**
+ * @brief Get the phase name as string for logging
+ *
+ * @param phase the phase
+ * @return phase name string
+ */
+const char *S4FIFO_get_phase_name(S4FIFO_phase_t phase) {
+  switch (phase) {
+    case S4FIFO_PHASE_WARMUP:
+      return "WARMUP";
+    case S4FIFO_PHASE_FEATURE_COLLECT:
+      return "FEATURE_COLLECT";
+    case S4FIFO_PHASE_PREDICTION:
+      return "PREDICTION";
+    default:
+      return "UNKNOWN";
+  }
 }
 
 #ifdef __cplusplus
