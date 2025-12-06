@@ -136,6 +136,7 @@ typedef struct {
   int64_t insertion_time;
   int64_t freq;
   int32_t main_insert_freq;
+  int32_t insert_bucket;  // bucket index for hit position tracking
 } S4FIFO_obj_metadata_t;
 
 typedef struct {
