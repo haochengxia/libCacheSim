@@ -63,6 +63,7 @@ typedef struct {
   int32_t feature_num_buckets;  // Number of buckets for hit position histograms
   S4FIFO_feature_collector_t *feature_collector;  // NULL if not collecting
   S4FIFO_feature_vector_t last_features;          // Most recent feature vector
+  char dump_file_path[256];  // Path to dump feature file (empty = no dump)
 } S4FIFO_params_t;
 
 static const char *DEFAULT_CACHE_PARAMS =
@@ -169,7 +170,7 @@ cache_t *S4FIFO_init(const common_cache_params_t ccache_params,
   if (params->collect_features) {
     params->feature_collector = malloc(sizeof(S4FIFO_feature_collector_t));
     feature_collector_init(params->feature_collector, ccache_params.cache_size,
-                           params->feature_collect_reqs,
+                           small_fifo_size, main_fifo_size, ghost_fifo_size,
                            params->feature_num_buckets);
   }
   memset(&params->last_features, 0, sizeof(S4FIFO_feature_vector_t));
@@ -184,6 +185,22 @@ cache_t *S4FIFO_init(const common_cache_params_t ccache_params,
  */
 static void S4FIFO_free(cache_t *cache) {
   S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
+
+  // Dump features to file if path is specified
+  if (params->feature_collector != NULL && params->dump_file_path[0] != '\0') {
+    FILE *fp = fopen(params->dump_file_path, "w");
+    if (fp != NULL) {
+      // Get final features
+      feature_collector_get_features(
+          params->feature_collector, &params->last_features,
+          params->small_fifo->get_occupied_byte(params->small_fifo),
+          params->main_fifo->get_occupied_byte(params->main_fifo),
+          params->ghost_fifo ? params->ghost_fifo->get_occupied_byte(params->ghost_fifo) : 0);
+      feature_vector_print(&params->last_features, fp);
+      fclose(fp);
+    }
+  }
+
   free_request(params->req_local);
   params->small_fifo->cache_free(params->small_fifo);
   if (params->ghost_fifo != NULL) {
@@ -253,6 +270,7 @@ static bool S4FIFO_get(cache_t *cache, const request_t *req) {
       }
       /* Extract features at phase transition (for ML training) */
       if (params->feature_collector != NULL) {
+        // Update last_features from feature collector
         feature_collector_get_features(
             params->feature_collector, &params->last_features,
             params->small_fifo->get_occupied_byte(params->small_fifo),
@@ -264,12 +282,18 @@ static bool S4FIFO_get(cache_t *cache, const request_t *req) {
     }
   }
 
-  /* Feature collection: record request */
+  /* Feature collection: record request index, 1st request etc. */
   if (params->feature_collector != NULL) {
     feature_collector_record_request(params->feature_collector, cache->n_req);
   }
 
   bool cache_hit = cache_get_base(cache, req);
+
+  // Record miss during feature collection phase
+  if (!cache_hit && params->feature_collector != NULL &&
+      params->current_phase == S4FIFO_PHASE_FEATURE_COLLECT) {
+    feature_collector_record_miss(params->feature_collector);
+  }
 
   return cache_hit;
 }
@@ -309,6 +333,7 @@ static cache_obj_t *S4FIFO_find(cache_t *cache, const request_t *req,
   /* update cache is true from now */
   params->hit_on_ghost = false;
   S4FIFO_feature_collector_t *fc = params->feature_collector;
+  bool collecting = (fc != NULL && params->current_phase == S4FIFO_PHASE_FEATURE_COLLECT);
 
   cache_obj_t *obj = params->small_fifo->find(params->small_fifo, req, true);
   if (obj != NULL) {
@@ -318,9 +343,8 @@ static cache_obj_t *S4FIFO_find(cache_t *cache, const request_t *req,
       obj->S4FIFO.freq += 1;
     }
     /* Feature collection: hit in small FIFO */
-    if (fc != NULL) {
-      feature_collector_record_hit_small(fc, obj->S4FIFO.insertion_time,
-                                         cache->n_req);
+    if (collecting) {
+      feature_collector_record_hit_small(fc, obj->S4FIFO.insertion_time);
       feature_collector_record_repeat(fc);
     }
     return obj;
@@ -337,12 +361,11 @@ static cache_obj_t *S4FIFO_find(cache_t *cache, const request_t *req,
 
     if (ghost_freq >= params->ghost_to_main_threshold) {
       /* Feature collection: ghost hit with hole-adjusted position */
-      if (fc != NULL) {
+      if (collecting) {
         feature_collector_record_hit_ghost(fc, ghost_obj->S4FIFO.insertion_time,
-                                           ghost_obj->S4FIFO.insert_bucket,
-                                           cache->n_req);
+                                           ghost_obj->S4FIFO.insert_bucket);
         // Record middle removal since we're promoting this object
-        feature_collector_record_ghost_removal(fc, cache->n_req);
+        feature_collector_record_ghost_removal(fc);
       }
 
       params->ghost_fifo->remove(params->ghost_fifo, req->obj_id);
@@ -358,9 +381,8 @@ static cache_obj_t *S4FIFO_find(cache_t *cache, const request_t *req,
   if (obj != NULL) {
     obj->S4FIFO.freq += 1;
     /* Feature collection: hit in main FIFO */
-    if (fc != NULL) {
-      feature_collector_record_hit_main(fc, obj->S4FIFO.insertion_time,
-                                        cache->n_req);
+    if (collecting) {
+      feature_collector_record_hit_main(fc, obj->S4FIFO.insertion_time);
       feature_collector_record_repeat(fc);
     }
   }
@@ -394,9 +416,9 @@ static cache_obj_t *S4FIFO_insert(cache_t *cache, const request_t *req) {
     obj = main->insert(main, req);
     /* Feature collection: record insertion to main */
     if (fc != NULL && obj != NULL) {
-      obj->S4FIFO.insertion_time = cache->n_req;
+      obj->S4FIFO.insertion_time = fc->main_insert_counter;
       obj->S4FIFO.insert_bucket =
-          (int32_t)feature_collector_record_insert_main(fc, cache->n_req);
+          (int32_t)feature_collector_record_insert_main(fc);
     }
   } else {
     /* insert into small fifo */
@@ -409,9 +431,9 @@ static cache_obj_t *S4FIFO_insert(cache_t *cache, const request_t *req) {
       obj = main->insert(main, req);
       /* Feature collection: record insertion to main */
       if (fc != NULL && obj != NULL) {
-        obj->S4FIFO.insertion_time = cache->n_req;
+        obj->S4FIFO.insertion_time = fc->main_insert_counter;
         obj->S4FIFO.insert_bucket =
-            (int32_t)feature_collector_record_insert_main(fc, cache->n_req);
+            (int32_t)feature_collector_record_insert_main(fc);
       }
     } else {
       obj = small->insert(small, req);
@@ -420,10 +442,13 @@ static cache_obj_t *S4FIFO_insert(cache_t *cache, const request_t *req) {
       obj->time_stamp = params->s_counter;
       /* Feature collection: record insertion to small and unique object */
       if (fc != NULL && obj != NULL) {
-        obj->S4FIFO.insertion_time = cache->n_req;
+        obj->S4FIFO.insertion_time = fc->small_insert_counter;
         obj->S4FIFO.insert_bucket =
-            (int32_t)feature_collector_record_insert_small(fc, cache->n_req);
-        feature_collector_record_unique(fc);
+            (int32_t)feature_collector_record_insert_small(fc);
+        // Only count unique during feature collection phase
+        if (params->current_phase == S4FIFO_PHASE_FEATURE_COLLECT) {
+          feature_collector_record_unique(fc);
+        }
       }
     }
   }
@@ -469,9 +494,9 @@ static void S4FIFO_evict_small(cache_t *cache, const request_t *req) {
       cache_obj_t *main_obj = main->insert(main, params->req_local);
       /* Feature collection: promoted to main, update insertion time */
       if (fc != NULL && main_obj != NULL) {
-        main_obj->S4FIFO.insertion_time = cache->n_req;
+        main_obj->S4FIFO.insertion_time = fc->main_insert_counter;
         main_obj->S4FIFO.insert_bucket =
-            (int32_t)feature_collector_record_insert_main(fc, cache->n_req);
+            (int32_t)feature_collector_record_insert_main(fc);
       }
     } else {
       // insert to ghost
@@ -493,14 +518,18 @@ static void S4FIFO_evict_small(cache_t *cache, const request_t *req) {
         if (ghost_obj != NULL) {
           ghost_obj->S4FIFO.freq = small_freq;
           /* Store insertion time and bucket for hit position tracking */
-          ghost_obj->S4FIFO.insertion_time = cache->n_req;
           if (fc != NULL) {
+            ghost_obj->S4FIFO.insertion_time = fc->ghost_insert_counter;
             ghost_obj->S4FIFO.insert_bucket =
-                (int32_t)feature_collector_record_insert_ghost(fc, cache->n_req);
+                (int32_t)feature_collector_record_insert_ghost(fc);
           }
         }
       }
       has_evicted = true;
+      // Record one-hit wonder during feature collection phase
+      if (fc != NULL && params->current_phase == S4FIFO_PHASE_FEATURE_COLLECT) {
+        feature_collector_record_onehit(fc);
+      }
     }
 
     // remove from small fifo, but do not update stat
@@ -530,9 +559,9 @@ static void S4FIFO_evict_main(cache_t *cache, const request_t *req) {
       new_obj->S4FIFO.freq = MIN(freq, 3) - 1;
       /* Feature collection: update insertion time for reinserted object */
       if (fc != NULL) {
-        new_obj->S4FIFO.insertion_time = cache->n_req;
+        new_obj->S4FIFO.insertion_time = fc->main_insert_counter;
         new_obj->S4FIFO.insert_bucket =
-            (int32_t)feature_collector_record_insert_main(fc, cache->n_req);
+            (int32_t)feature_collector_record_insert_main(fc);
       }
 
     } else {
@@ -662,6 +691,8 @@ static void S4FIFO_parse_params(cache_t *cache,
     } else if (strcasecmp(key, "collect-features") == 0) {
       params->collect_features =
           (strcasecmp(value, "true") == 0 || atoi(value) == 1);
+    } else if (strcasecmp(key, "dump-file") == 0) {
+      strncpy(params->dump_file_path, value, sizeof(params->dump_file_path) - 1);
     } else if (strcasecmp(key, "print") == 0) {
       printf("parameters: %s\n", S4FIFO_current_params(params));
       exit(0);
@@ -768,9 +799,11 @@ void S4FIFO_enable_feature_collection(cache_t *cache, int64_t window_size,
   S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
   if (params->feature_collector == NULL) {
     params->feature_collector = malloc(sizeof(S4FIFO_feature_collector_t));
+    int64_t small_size = params->small_fifo->cache_size;
+    int64_t main_size = params->main_fifo->cache_size;
+    int64_t ghost_size = params->ghost_fifo ? params->ghost_fifo->cache_size : 0;
     feature_collector_init(params->feature_collector, cache->cache_size,
-                           window_size > 0 ? window_size
-                                           : params->feature_collect_reqs,
+                           small_size, main_size, ghost_size,
                            num_buckets > 0 ? num_buckets
                                            : params->feature_num_buckets);
   }

@@ -1,0 +1,68 @@
+# Warmup complete, cache full, starting collection
+
+# ========== FINAL HIT POSITION HISTOGRAMS ==========
+# small hit position distribution (total_hits=544, max_pos=4293, bin_size=216, n_buckets=20)
+# bin_start,bin_end,count,ratio
+small,0,215,66,0.121324
+small,216,431,49,0.090074
+small,432,647,122,0.224265
+small,648,863,115,0.211397
+small,864,1079,46,0.084559
+small,1080,1295,13,0.023897
+small,1296,1511,16,0.029412
+small,1512,1727,11,0.020221
+small,1728,1943,13,0.023897
+small,1944,2159,7,0.012868
+small,2160,2375,5,0.009191
+small,2376,2591,12,0.022059
+small,2592,2807,10,0.018382
+small,2808,3023,8,0.014706
+small,3024,3239,7,0.012868
+small,3240,3455,9,0.016544
+small,3456,3671,14,0.025735
+small,3672,3887,14,0.025735
+small,3888,4103,6,0.011029
+small,4104,4319,1,0.001838
+# main hit position distribution (total_hits=2862, max_pos=38733, bin_size=1938, n_buckets=20)
+# bin_start,bin_end,count,ratio
+main,0,1937,2117,0.739693
+main,3876,5813,4,0.001398
+main,5814,7751,6,0.002096
+main,11628,13565,49,0.017121
+main,13566,15503,10,0.003494
+main,17442,19379,19,0.006639
+main,19380,21317,2,0.000699
+main,23256,25193,19,0.006639
+main,27132,29069,46,0.016073
+main,29070,31007,83,0.029001
+main,31008,32945,186,0.064990
+main,32946,34883,52,0.018169
+main,34884,36821,135,0.047170
+main,36822,38759,134,0.046820
+# ghost hit position distribution (total_hits=181, max_pos=38669, bin_size=1938, n_buckets=20)
+# bin_start,bin_end,count,ratio
+ghost,0,1937,53,0.292818
+ghost,1938,3875,30,0.165746
+ghost,3876,5813,12,0.066298
+ghost,5814,7751,16,0.088398
+ghost,7752,9689,15,0.082873
+ghost,9690,11627,3,0.016575
+ghost,11628,13565,6,0.033149
+ghost,13566,15503,2,0.011050
+ghost,15504,17441,5,0.027624
+ghost,17442,19379,3,0.016575
+ghost,19380,21317,4,0.022099
+ghost,21318,23255,1,0.005525
+ghost,23256,25193,5,0.027624
+ghost,25194,27131,1,0.005525
+ghost,27132,29069,1,0.005525
+ghost,29070,31007,4,0.022099
+ghost,31008,32945,6,0.033149
+ghost,32946,34883,4,0.022099
+ghost,34884,36821,2,0.011050
+ghost,36822,38759,8,0.044199
+
+# ========== SUMMARY ==========
+# small: total_hits=544, max_pos=4293
+# main:  total_hits=2862, max_pos=38733
+# ghost: total_hits=181, max_pos=38669

@@ -29,3 +29,5 @@ aggregated_results.csv
 grid_search/aggregated_results_conf_1.csv
 grid_search/grid_tasks
 grid_search/grid_tasks_conf2
+feature/collected
+feature/feature_tasks
