@@ -6,7 +6,7 @@ import os
 
 cachesim_path = "/mnt/cfs/_libCacheSim/_build/bin/cachesim"
 trace_list_path = "/mnt/cfs/_libCacheSim/grid_search/trace_lists.txt"
-grid_config_path = "/mnt/cfs/_libCacheSim/grid_search/conf_3.json"
+grid_config_path = "/mnt/cfs/_libCacheSim/grid_search/conf_2026.json"
 
 with open(trace_list_path, 'r') as f:
     data_path_list = f.readlines()
