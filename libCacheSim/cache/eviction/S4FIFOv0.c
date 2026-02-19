@@ -5,9 +5,9 @@
 // performance-sensitive. It will not gather other statistics information like
 // hit position or others.
 //
-// This version (S4FIFO.c) is for cache miss ratio comparison only.
+// Note: v0 only use a set of parameters all the time, and it will not update the parameters during the execution.
 //
-//  S4FIFO.c
+//  S4FIFOv0.c
 //  libCacheSim
 //
 //  Modified by Haocheng at 08/23/2025
@@ -25,9 +25,6 @@ typedef struct {
   cache_t *main_fifo;
   bool hit_on_ghost;
 
-  // bool collect_features;  // whether to collect features for learning-based cache
-  //                        // replacement, False by default
-
   int hit_on_ghost_freq;  // frequency of the object in ghost fifo
   int move_to_main_threshold;
   double small_size_ratio;
@@ -35,17 +32,7 @@ typedef struct {
   double small_skip_ratio;
   int ghost_to_main_threshold;
 
-  int64_t after_n_reqs;
-  // new parameters for dynamic adjustment
-  double ns; // double small_size_ratio;
-  double ng; // ghost_size_ratio;
-  double nk; // small_skip_ratio;
-  int ngt;   // ghost_to_main_threshold;
-  int nst;   // move_to_main_threshold; aka small_to_main_threshold
-  int64_t request_count; // count the number of requests, used for dynamic adjustment
-
   bool has_evicted;
-  bool has_adjusted;
   request_t *req_local;
 
   int64_t s_counter;  // is used for small skip logic
@@ -53,8 +40,7 @@ typedef struct {
 
 static const char *DEFAULT_CACHE_PARAMS =
     "small-size-ratio=0.10,ghost-size-ratio=0.90,move-to-main-threshold=2,"
-    "small-skip-ratio=0,ghost-to-main-threshold=0,after-n-reqs=1000,"
-    "ns=0.10,ng=0.90,nst=2,ngt=0,nk=0.10";
+    "small-skip-ratio=0,ghost-to-main-threshold=0";
 
 // ***********************************************************************
 // ****                                                               ****
@@ -124,7 +110,6 @@ cache_t *S4FIFO_init(const common_cache_params_t ccache_params,
   ccache_params_local.cache_size = small_fifo_size;
   params->small_fifo = FIFO_init(ccache_params_local, NULL);
   params->has_evicted = false;
-  params->has_adjusted = false;
 
   if (ghost_fifo_size > 0) {
     ccache_params_local.cache_size = ghost_fifo_size;
@@ -143,7 +128,6 @@ cache_t *S4FIFO_init(const common_cache_params_t ccache_params,
 
   /* S4FIFO: initialize the s_counter, since no obj enter small queue -> 0 */
   params->s_counter = 0;
-  params->request_count = 0;
 
   return cache;
 }
@@ -189,28 +173,6 @@ static bool S4FIFO_get(cache_t *cache, const request_t *req) {
   DEBUG_ASSERT(params->small_fifo->get_occupied_byte(params->small_fifo) +
                    params->main_fifo->get_occupied_byte(params->main_fifo) <=
                cache->cache_size);
-
-  // Here we update the request count and check if we need to adjust the parameters
-  if (params->has_evicted) params->request_count++;
-  if (params->request_count >= params->after_n_reqs && !params->has_adjusted) {
-    // threshould we adjust the parameters
-    params->move_to_main_threshold = params->nst;
-    params->small_skip_ratio = params->nk;
-    params->ghost_to_main_threshold = params->ngt;
-    // queue size adjustment
-    int64_t small_fifo_size =
-        (int64_t)cache->cache_size * params->small_size_ratio;
-    int64_t main_fifo_size = cache->cache_size - small_fifo_size;
-    int64_t ghost_fifo_size =
-        (int64_t)(cache->cache_size * params->ghost_size_ratio);
-
-    params->small_fifo->resize(params->small_fifo, small_fifo_size);
-    if (params->ghost_fifo != NULL) {
-      params->ghost_fifo->resize(params->ghost_fifo, ghost_fifo_size);
-    }
-    params->main_fifo->resize(params->main_fifo, main_fifo_size);
-    params->has_adjusted = true;
-  }
 
   bool cache_hit = cache_get_base(cache, req);
 
@@ -522,18 +484,6 @@ static void S4FIFO_parse_params(cache_t *cache,
       params->small_skip_ratio = strtod(value, NULL);
     } else if (strcasecmp(key, "ghost-to-main-threshold") == 0) {
       params->ghost_to_main_threshold = atoi(value);
-    } else if (strcasecmp(key, "after-n-reqs") == 0) {
-      params->after_n_reqs = atoi(value);
-    } else if (strcasecmp(key, "ns") == 0) {
-      params->ns = strtod(value, NULL);
-    } else if (strcasecmp(key, "ng") == 0) {
-      params->ng = strtod(value, NULL);
-    } else if (strcasecmp(key, "nk") == 0) {
-      params->nk = strtod(value, NULL);
-    } else if (strcasecmp(key, "nst") == 0) {
-      params->nst = atoi(value);
-    } else if (strcasecmp(key, "ngt") == 0) {
-      params->ngt = atoi(value);
     } else if (strcasecmp(key, "print") == 0) {
       printf("parameters: %s\n", S4FIFO_current_params(params));
       exit(0);
