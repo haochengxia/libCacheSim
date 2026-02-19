@@ -49,6 +49,10 @@ typedef struct {
   request_t *req_local;
 
   int64_t s_counter;  // is used for small skip logic
+
+  // custom hit ratio recording
+  int64_t miss_count_after_adjustment;
+  int64_t req_count_after_adjustment;
 } S4FIFO_params_t;
 
 static const char *DEFAULT_CACHE_PARAMS =
@@ -155,6 +159,13 @@ cache_t *S4FIFO_init(const common_cache_params_t ccache_params,
  */
 static void S4FIFO_free(cache_t *cache) {
   S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
+  // before free, dump the custom hit ratio after adjustment
+  if (params->has_adjusted) {
+    double hit_ratio_after_adjustment =
+        1.0 - (double)params->miss_count_after_adjustment /
+                    params->req_count_after_adjustment;
+    printf("S4FIFO: hit ratio after adjustment: %.4lf\n", hit_ratio_after_adjustment);
+  }
   free_request(params->req_local);
   params->small_fifo->cache_free(params->small_fifo);
   if (params->ghost_fifo != NULL) {
@@ -190,6 +201,17 @@ static bool S4FIFO_get(cache_t *cache, const request_t *req) {
                    params->main_fifo->get_occupied_byte(params->main_fifo) <=
                cache->cache_size);
 
+
+  bool cache_hit = cache_get_base(cache, req);
+
+  // custom hit ratio recording
+  if (params->has_adjusted) {
+    params->req_count_after_adjustment++;
+    if (!cache_hit) {
+      params->miss_count_after_adjustment++;
+    }
+  }
+
   // Here we update the request count and check if we need to adjust the parameters
   if (params->has_evicted) params->request_count++;
   if (params->request_count >= params->after_n_reqs && !params->has_adjusted) {
@@ -204,15 +226,13 @@ static bool S4FIFO_get(cache_t *cache, const request_t *req) {
     int64_t ghost_fifo_size =
         (int64_t)(cache->cache_size * params->ghost_size_ratio);
 
-    params->small_fifo->resize(params->small_fifo, small_fifo_size);
+    params->small_fifo->cache_size = small_fifo_size;
     if (params->ghost_fifo != NULL) {
-      params->ghost_fifo->resize(params->ghost_fifo, ghost_fifo_size);
+      params->ghost_fifo->cache_size = ghost_fifo_size;
     }
-    params->main_fifo->resize(params->main_fifo, main_fifo_size);
+    params->main_fifo->cache_size = main_fifo_size;
     params->has_adjusted = true;
   }
-
-  bool cache_hit = cache_get_base(cache, req);
 
   return cache_hit;
 }
