@@ -159,12 +159,12 @@ cache_t *S4FIFO_init(const common_cache_params_t ccache_params,
  */
 static void S4FIFO_free(cache_t *cache) {
   S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
-  // before free, dump the custom hit ratio after adjustment
+  // before free, dump the custom miss ratio after adjustment
   if (params->has_adjusted) {
-    double hit_ratio_after_adjustment =
-        1.0 - (double)params->miss_count_after_adjustment /
+    double miss_ratio_after_adjustment =
+      (double)params->miss_count_after_adjustment /
                     params->req_count_after_adjustment;
-    printf("S4FIFO: hit ratio after adjustment: %.4lf\n", hit_ratio_after_adjustment);
+    printf("S4FIFO: miss ratio after adjustment: %.4lf\n", miss_ratio_after_adjustment);
   }
   free_request(params->req_local);
   params->small_fifo->cache_free(params->small_fifo);
