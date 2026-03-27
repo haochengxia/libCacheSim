@@ -1,38 +1,16 @@
 //
-// This version (S4FIFO.c) is for cache miss ratio comparison only.
-// Since we need different combinations of parameters to achieve the best miss
-// ratio. And the number of combinations is large, therefore, it is
-// performance-sensitive. It will not gather other statistics information like
-// hit position or others.
+// S4FIFOv2 adds an explicit state transition step when parameters change.
+// The goal is to keep the "new parameters + old cache state" mismatch from
+// leaking into subsequent requests.
 //
-// This version (S4FIFO.c) is for cache miss ratio comparison only.
-//
-//  S4FIFO.c
+//  S4FIFOv2.c
 //  libCacheSim
-//
-//  Modified by Haocheng at 08/23/2025
 
 #include "dataStructure/hashtable/hashtable.h"
 #include "libCacheSim/evictionAlgo.h"
 
 #ifdef __cplusplus
 extern "C" {
-#endif
-
-#ifndef S4FIFO_ALGO_NAME
-#define S4FIFO_ALGO_NAME "S4FIFO"
-#endif
-
-#ifndef S4FIFO_CACHE_NAME_PREFIX
-#define S4FIFO_CACHE_NAME_PREFIX "S4FIFO"
-#endif
-
-#ifndef S4FIFO_UPDATE_QUEUE_SIZES_ON_ADJUSTMENT
-#define S4FIFO_UPDATE_QUEUE_SIZES_ON_ADJUSTMENT 1
-#endif
-
-#ifndef S4FIFO_KEEP_GHOST_FREQ_ON_PROMOTION
-#define S4FIFO_KEEP_GHOST_FREQ_ON_PROMOTION 0
 #endif
 
 typedef struct {
@@ -84,23 +62,26 @@ static const char *DEFAULT_CACHE_PARAMS =
 // ****                   function declarations                       ****
 // ****                                                               ****
 // ***********************************************************************
-static void S4FIFO_free(cache_t *cache);
-static bool S4FIFO_get(cache_t *cache, const request_t *req);
+static void S4FIFOv2_free(cache_t *cache);
+static bool S4FIFOv2_get(cache_t *cache, const request_t *req);
 
-static cache_obj_t *S4FIFO_find(cache_t *cache, const request_t *req,
+static cache_obj_t *S4FIFOv2_find(cache_t *cache, const request_t *req,
                                 const bool update_cache);
-static cache_obj_t *S4FIFO_insert(cache_t *cache, const request_t *req);
-static cache_obj_t *S4FIFO_to_evict(cache_t *cache, const request_t *req);
-static void S4FIFO_evict(cache_t *cache, const request_t *req);
-static bool S4FIFO_remove(cache_t *cache, const obj_id_t obj_id);
-static inline int64_t S4FIFO_get_occupied_byte(const cache_t *cache);
-static inline int64_t S4FIFO_get_n_obj(const cache_t *cache);
-static inline bool S4FIFO_can_insert(cache_t *cache, const request_t *req);
-static void S4FIFO_parse_params(cache_t *cache,
-                                const char *cache_specific_params);
+static cache_obj_t *S4FIFOv2_insert(cache_t *cache, const request_t *req);
+static cache_obj_t *S4FIFOv2_to_evict(cache_t *cache, const request_t *req);
+static void S4FIFOv2_evict(cache_t *cache, const request_t *req);
+static bool S4FIFOv2_remove(cache_t *cache, const obj_id_t obj_id);
+static inline int64_t S4FIFOv2_get_occupied_byte(const cache_t *cache);
+static inline int64_t S4FIFOv2_get_n_obj(const cache_t *cache);
+static inline bool S4FIFOv2_can_insert(cache_t *cache, const request_t *req);
+static void S4FIFOv2_parse_params(cache_t *cache,
+                                  const char *cache_specific_params);
 
-static void S4FIFO_evict_small(cache_t *cache, const request_t *req);
-static void S4FIFO_evict_main(cache_t *cache, const request_t *req);
+static void S4FIFOv2_evict_small(cache_t *cache, const request_t *req);
+static void S4FIFOv2_evict_main(cache_t *cache, const request_t *req);
+static void S4FIFOv2_apply_adjustment(cache_t *cache);
+static void S4FIFOv2_rebalance_after_adjustment(cache_t *cache);
+static void S4FIFOv2_trim_fifo(cache_t *fifo, request_t *req_local);
 
 // ***********************************************************************
 // ****                                                               ****
@@ -108,21 +89,21 @@ static void S4FIFO_evict_main(cache_t *cache, const request_t *req);
 // ****                                                               ****
 // ***********************************************************************
 
-cache_t *S4FIFO_init(const common_cache_params_t ccache_params,
-                     const char *cache_specific_params) {
+cache_t *S4FIFOv2_init(const common_cache_params_t ccache_params,
+                       const char *cache_specific_params) {
   cache_t *cache =
-      cache_struct_init(S4FIFO_ALGO_NAME, ccache_params, cache_specific_params);
-  cache->cache_init = S4FIFO_init;
-  cache->cache_free = S4FIFO_free;
-  cache->get = S4FIFO_get;
-  cache->find = S4FIFO_find;
-  cache->insert = S4FIFO_insert;
-  cache->evict = S4FIFO_evict;
-  cache->remove = S4FIFO_remove;
-  cache->to_evict = S4FIFO_to_evict;
-  cache->get_n_obj = S4FIFO_get_n_obj;
-  cache->get_occupied_byte = S4FIFO_get_occupied_byte;
-  cache->can_insert = S4FIFO_can_insert;
+      cache_struct_init("S4FIFOv2", ccache_params, cache_specific_params);
+  cache->cache_init = S4FIFOv2_init;
+  cache->cache_free = S4FIFOv2_free;
+  cache->get = S4FIFOv2_get;
+  cache->find = S4FIFOv2_find;
+  cache->insert = S4FIFOv2_insert;
+  cache->evict = S4FIFOv2_evict;
+  cache->remove = S4FIFOv2_remove;
+  cache->to_evict = S4FIFOv2_to_evict;
+  cache->get_n_obj = S4FIFOv2_get_n_obj;
+  cache->get_occupied_byte = S4FIFOv2_get_occupied_byte;
+  cache->can_insert = S4FIFOv2_can_insert;
 
   cache->obj_md_size = 0;
 
@@ -132,9 +113,9 @@ cache_t *S4FIFO_init(const common_cache_params_t ccache_params,
   params->req_local = new_request();
   params->hit_on_ghost = false;
 
-  S4FIFO_parse_params(cache, DEFAULT_CACHE_PARAMS);
+  S4FIFOv2_parse_params(cache, DEFAULT_CACHE_PARAMS);
   if (cache_specific_params != NULL) {
-    S4FIFO_parse_params(cache, cache_specific_params);
+    S4FIFOv2_parse_params(cache, cache_specific_params);
   }
 
   int64_t small_fifo_size =
@@ -161,9 +142,8 @@ cache_t *S4FIFO_init(const common_cache_params_t ccache_params,
   ccache_params_local.cache_size = main_fifo_size;
   params->main_fifo = FIFO_init(ccache_params_local, NULL);
 
-  snprintf(cache->cache_name, CACHE_NAME_ARRAY_LEN,
-           S4FIFO_CACHE_NAME_PREFIX "-%.4lf-%d", params->small_size_ratio,
-           params->move_to_main_threshold);
+  snprintf(cache->cache_name, CACHE_NAME_ARRAY_LEN, "S4FIFOv2-%.4lf-%d",
+           params->small_size_ratio, params->move_to_main_threshold);
 
   /* S4FIFO: initialize the s_counter, since no obj enter small queue -> 0 */
   params->s_counter = 0;
@@ -177,7 +157,7 @@ cache_t *S4FIFO_init(const common_cache_params_t ccache_params,
  *
  * @param cache
  */
-static void S4FIFO_free(cache_t *cache) {
+static void S4FIFOv2_free(cache_t *cache) {
   S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
   // before free, dump the custom miss ratio after adjustment
   if (params->has_adjusted) {
@@ -216,7 +196,7 @@ static void S4FIFO_free(cache_t *cache) {
  * @param req
  * @return true if cache hit, false if cache miss
  */
-static bool S4FIFO_get(cache_t *cache, const request_t *req) {
+static bool S4FIFOv2_get(cache_t *cache, const request_t *req) {
   S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
   DEBUG_ASSERT(params->small_fifo->get_occupied_byte(params->small_fifo) +
                    params->main_fifo->get_occupied_byte(params->main_fifo) <=
@@ -232,42 +212,16 @@ static bool S4FIFO_get(cache_t *cache, const request_t *req) {
     }
     // we can dump the virtual time id, object id, and hit/miss information for
     // each request to analyze the hit ratio in different time windows
-    // printf("request_id=%ld, vtime_id=%ld, obj_id=%ld, hit=%d\n",
-    //        params->req_count_after_adjustment, req->clock_time, req->obj_id,
-    //        cache_hit);
+    printf("request_id=%ld, vtime_id=%ld, obj_id=%ld, hit=%d\n",
+           params->req_count_after_adjustment, req->clock_time, req->obj_id,
+           cache_hit);
   }
 
   // Here we update the request count and check if we need to adjust the
   // parameters
   if (params->has_evicted) params->request_count++;
   if (params->request_count >= params->after_n_reqs && !params->has_adjusted) {
-    // threshould we adjust the parameters
-    printf("original small and ghost size %ld %ld",
-           params->small_fifo->cache_size, params->ghost_fifo->cache_size);
-    params->move_to_main_threshold = params->nst;
-    params->small_skip_ratio = params->nk;
-    params->ghost_to_main_threshold = params->ngt;
-#if S4FIFO_UPDATE_QUEUE_SIZES_ON_ADJUSTMENT
-    // queue size adjustment
-    params->small_size_ratio = params->ns;
-    params->ghost_size_ratio = params->ng;
-    int64_t small_fifo_size =
-        (int64_t)cache->cache_size * params->small_size_ratio;
-    int64_t main_fifo_size = cache->cache_size - small_fifo_size;
-    int64_t ghost_fifo_size =
-        (int64_t)(cache->cache_size * params->ghost_size_ratio);
-
-    params->small_fifo->cache_size = small_fifo_size;
-    if (params->ghost_fifo != NULL) {
-      params->ghost_fifo->cache_size = ghost_fifo_size;
-    }
-    params->main_fifo->cache_size = main_fifo_size;
-#endif
-    params->has_adjusted = true;
-    printf("adjusted small and ghost size %ld %ld",
-           params->small_fifo->cache_size, params->ghost_fifo->cache_size);
-
-    // Transition type
+    S4FIFOv2_apply_adjustment(cache);
   }
 
   return cache_hit;
@@ -288,8 +242,8 @@ static bool S4FIFO_get(cache_t *cache, const request_t *req) {
  *  and if the object is expired, it is removed from the cache
  * @return the object or NULL if not found
  */
-static cache_obj_t *S4FIFO_find(cache_t *cache, const request_t *req,
-                                const bool update_cache) {
+static cache_obj_t *S4FIFOv2_find(cache_t *cache, const request_t *req,
+                                  const bool update_cache) {
   S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
 
   // if update cache is false, we only check the fifo and main caches
@@ -355,25 +309,18 @@ static cache_obj_t *S4FIFO_find(cache_t *cache, const request_t *req,
  * @param req
  * @return the inserted object
  */
-static cache_obj_t *S4FIFO_insert(cache_t *cache, const request_t *req) {
+static cache_obj_t *S4FIFOv2_insert(cache_t *cache, const request_t *req) {
   S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
   cache_obj_t *obj = NULL;
-  bool promoted_from_ghost = false;
 
   cache_t *small = params->small_fifo;
   cache_t *main = params->main_fifo;
 
   if (params->hit_on_ghost) {
     /* insert into main FIFO */
-    promoted_from_ghost = true;
     params->hit_on_ghost = false;
-    obj = main->insert(main, req);
-#if S4FIFO_KEEP_GHOST_FREQ_ON_PROMOTION
-    obj->S4FIFO.freq = params->hit_on_ghost_freq;
-#else
-    obj->S4FIFO.freq = 0;
-#endif
     params->hit_on_ghost_freq = 0;
+    obj = main->insert(main, req);
   } else {
     /* insert into small fifo */
     if (req->obj_size >= small->cache_size) {
@@ -391,10 +338,8 @@ static cache_obj_t *S4FIFO_insert(cache_t *cache, const request_t *req) {
     }
   }
 
-  // New inserts start cold; ghost promotions may optionally inherit freq.
-  if (!promoted_from_ghost) {
-    obj->S4FIFO.freq = 0;
-  }
+  // if an object is inserted from ghost to main, we also set it to zero
+  obj->S4FIFO.freq = 0;
 
   return obj;
 }
@@ -409,12 +354,73 @@ static cache_obj_t *S4FIFO_insert(cache_t *cache, const request_t *req) {
  * @param cache the cache
  * @return the object to be evicted
  */
-static cache_obj_t *S4FIFO_to_evict(cache_t *cache, const request_t *req) {
+static cache_obj_t *S4FIFOv2_to_evict(cache_t *cache, const request_t *req) {
   assert(false);
   return NULL;
 }
 
-static void S4FIFO_evict_small(cache_t *cache, const request_t *req) {
+static void S4FIFOv2_trim_fifo(cache_t *fifo, request_t *req_local) {
+  while (fifo != NULL && fifo->get_occupied_byte(fifo) > fifo->cache_size) {
+    cache_obj_t *obj_to_evict = fifo->to_evict(fifo, req_local);
+    DEBUG_ASSERT(obj_to_evict != NULL);
+    bool removed = fifo->remove(fifo, obj_to_evict->obj_id);
+    DEBUG_ASSERT(removed);
+  }
+}
+
+static void S4FIFOv2_rebalance_after_adjustment(cache_t *cache) {
+  S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
+
+  while (params->small_fifo->get_occupied_byte(params->small_fifo) >
+         params->small_fifo->cache_size) {
+    S4FIFOv2_evict_small(cache, params->req_local);
+  }
+
+  while (params->main_fifo->get_occupied_byte(params->main_fifo) >
+         params->main_fifo->cache_size) {
+    S4FIFOv2_evict_main(cache, params->req_local);
+  }
+
+  S4FIFOv2_trim_fifo(params->ghost_fifo, params->req_local);
+}
+
+static void S4FIFOv2_apply_adjustment(cache_t *cache) {
+  S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
+  int64_t old_small_size = params->small_fifo->cache_size;
+  int64_t old_ghost_size =
+      params->ghost_fifo != NULL ? params->ghost_fifo->cache_size : 0;
+
+  params->move_to_main_threshold = params->nst;
+  params->small_skip_ratio = params->nk;
+  params->ghost_to_main_threshold = params->ngt;
+  params->small_size_ratio = params->ns;
+  params->ghost_size_ratio = params->ng;
+
+  int64_t new_small_size =
+      (int64_t)(cache->cache_size * params->small_size_ratio);
+  int64_t new_main_size = cache->cache_size - new_small_size;
+  int64_t new_ghost_size =
+      (int64_t)(cache->cache_size * params->ghost_size_ratio);
+
+  printf("original small and ghost size %ld %ld", old_small_size,
+         old_ghost_size);
+
+  params->small_fifo->cache_size = new_small_size;
+  params->main_fifo->cache_size = new_main_size;
+  if (params->ghost_fifo != NULL) {
+    params->ghost_fifo->cache_size = new_ghost_size;
+  }
+
+  S4FIFOv2_rebalance_after_adjustment(cache);
+  params->has_adjusted = true;
+  params->transition_type = 1;
+
+  printf("adjusted small and ghost size %ld %ld",
+         params->small_fifo->cache_size,
+         params->ghost_fifo != NULL ? params->ghost_fifo->cache_size : 0);
+}
+
+static void S4FIFOv2_evict_small(cache_t *cache, const request_t *req) {
   S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
   cache_t *small = params->small_fifo;
   cache_t *ghost = params->ghost_fifo;
@@ -449,7 +455,7 @@ static void S4FIFO_evict_small(cache_t *cache, const request_t *req) {
   }
 }
 
-static void S4FIFO_evict_main(cache_t *cache, const request_t *req) {
+static void S4FIFOv2_evict_main(cache_t *cache, const request_t *req) {
   S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
   cache_t *main = params->main_fifo;
 
@@ -486,7 +492,7 @@ static void S4FIFO_evict_main(cache_t *cache, const request_t *req) {
  * @param req not used
  * @param evicted_obj if not NULL, return the evicted object to caller
  */
-static void S4FIFO_evict(cache_t *cache, const request_t *req) {
+static void S4FIFOv2_evict(cache_t *cache, const request_t *req) {
   S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
   params->has_evicted = true;
 
@@ -495,9 +501,9 @@ static void S4FIFO_evict(cache_t *cache, const request_t *req) {
 
   if (main->get_occupied_byte(main) > main->cache_size ||
       small->get_occupied_byte(small) == 0) {
-    S4FIFO_evict_main(cache, req);
+    S4FIFOv2_evict_main(cache, req);
   } else {
-    S4FIFO_evict_small(cache, req);
+    S4FIFOv2_evict_small(cache, req);
   }
 }
 
@@ -514,7 +520,7 @@ static void S4FIFO_evict(cache_t *cache, const request_t *req) {
  * @return true if the object is removed, false if the object is not in the
  * cache
  */
-static bool S4FIFO_remove(cache_t *cache, const obj_id_t obj_id) {
+static bool S4FIFOv2_remove(cache_t *cache, const obj_id_t obj_id) {
   S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
   bool removed = false;
   removed = removed || params->small_fifo->remove(params->small_fifo, obj_id);
@@ -525,19 +531,19 @@ static bool S4FIFO_remove(cache_t *cache, const obj_id_t obj_id) {
   return removed;
 }
 
-static inline int64_t S4FIFO_get_occupied_byte(const cache_t *cache) {
+static inline int64_t S4FIFOv2_get_occupied_byte(const cache_t *cache) {
   S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
   return params->small_fifo->get_occupied_byte(params->small_fifo) +
          params->main_fifo->get_occupied_byte(params->main_fifo);
 }
 
-static inline int64_t S4FIFO_get_n_obj(const cache_t *cache) {
+static inline int64_t S4FIFOv2_get_n_obj(const cache_t *cache) {
   S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
   return params->small_fifo->get_n_obj(params->small_fifo) +
          params->main_fifo->get_n_obj(params->main_fifo);
 }
 
-static inline bool S4FIFO_can_insert(cache_t *cache, const request_t *req) {
+static inline bool S4FIFOv2_can_insert(cache_t *cache, const request_t *req) {
   S4FIFO_params_t *params = (S4FIFO_params_t *)cache->eviction_params;
 
   return req->obj_size <= params->small_fifo->cache_size &&
@@ -549,7 +555,7 @@ static inline bool S4FIFO_can_insert(cache_t *cache, const request_t *req) {
 // ****                parameter set up functions                     ****
 // ****                                                               ****
 // ***********************************************************************
-static const char *S4FIFO_current_params(S4FIFO_params_t *params) {
+static const char *S4FIFOv2_current_params(S4FIFO_params_t *params) {
   static __thread char params_str[128];
   snprintf(params_str, 128,
            "small-size-ratio=%.4lf,ghost-size-ratio=%.4lf,move-to-main-"
@@ -559,7 +565,7 @@ static const char *S4FIFO_current_params(S4FIFO_params_t *params) {
   return params_str;
 }
 
-static void S4FIFO_parse_params(cache_t *cache,
+static void S4FIFOv2_parse_params(cache_t *cache,
                                 const char *cache_specific_params) {
   S4FIFO_params_t *params = (S4FIFO_params_t *)(cache->eviction_params);
 
@@ -601,7 +607,7 @@ static void S4FIFO_parse_params(cache_t *cache,
     } else if (strcasecmp(key, "ngt") == 0) {
       params->ngt = atoi(value);
     } else if (strcasecmp(key, "print") == 0) {
-      printf("parameters: %s\n", S4FIFO_current_params(params));
+      printf("parameters: %s\n", S4FIFOv2_current_params(params));
       exit(0);
     } else {
       ERROR("%s does not have parameter %s\n", cache->cache_name, key);

@@ -147,6 +147,30 @@ cache_t *S3FIFOv0_init(const common_cache_params_t ccache_params,
 cache_t *S4FIFO_init(const common_cache_params_t ccache_params,
                         const char *cache_specific_params);
 
+cache_t *S4FIFOv2_init(const common_cache_params_t ccache_params,
+                       const char *cache_specific_params);
+
+cache_t *S4FIFOv3_init(const common_cache_params_t ccache_params,
+                       const char *cache_specific_params);
+
+cache_t *S4FIFOv4_init(const common_cache_params_t ccache_params,
+                       const char *cache_specific_params);
+
+cache_t *S4FIFOv5_init(const common_cache_params_t ccache_params,
+                       const char *cache_specific_params);
+
+cache_t *S4FIFOv6_init(const common_cache_params_t ccache_params,
+                       const char *cache_specific_params);
+
+cache_t *S4FIFOv7_init(const common_cache_params_t ccache_params,
+                       const char *cache_specific_params);
+
+cache_t *S4FIFOv8_init(const common_cache_params_t ccache_params,
+                       const char *cache_specific_params);
+
+cache_t *S4FIFOvclear_init(const common_cache_params_t ccache_params,
+                           const char *cache_specific_params);
+
 cache_t *S3LRU_init(const common_cache_params_t ccache_params,
                     const char *cache_specific_params);
 

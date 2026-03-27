@@ -52,6 +52,14 @@ set(eviction_sources_c
         eviction/RandomTwo.c
         eviction/S3FIFO.c
         eviction/S4FIFO.c
+        eviction/S4FIFOv2.c
+        eviction/S4FIFOv3.c
+        eviction/S4FIFOv4.c
+        eviction/S4FIFOv5.c
+        eviction/S4FIFOv6.c
+        eviction/S4FIFOv7.c
+        eviction/S4FIFOv8.c
+        eviction/S4FIFOvclear.c
         eviction/Sieve.c
         eviction/Size.c
         eviction/SLRU.c
