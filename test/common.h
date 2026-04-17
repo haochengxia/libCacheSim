@@ -82,6 +82,14 @@ static reader_t *setup_oracleGeneralBin_reader(void) {
   return reader_oracle;
 }
 
+static reader_t *setup_mix_oracleGeneral_reader(void) {
+  char data_path[1024];
+  char mix_path[2048];
+  _detect_data_path(data_path, "cloudPhysicsIO.oracleGeneral.bin");
+  snprintf(mix_path, sizeof(mix_path), "%s,%s", data_path, data_path);
+  return setup_reader(mix_path, MIX_TRACE, NULL);
+}
+
 static reader_t *setup_GLCacheTestData_reader(void) {
   const char *url =
       "https://ftp.pdl.cmu.edu/pub/datasets/twemcacheWorkload/"

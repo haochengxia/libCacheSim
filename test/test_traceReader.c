@@ -132,6 +132,37 @@ void test_reader_more2(gconstpointer user_data) {
   close_reader(cloned_reader);
 }
 
+void test_mix_reader(gconstpointer user_data) {
+  reader_t *reader = (reader_t *)user_data;
+  request_t *req = new_request();
+
+  g_assert_cmpint(get_trace_type(reader), ==, MIX_TRACE);
+  g_assert_cmpint(get_num_of_req(reader), ==, trace_length * 2);
+
+  g_assert_cmpint(read_one_req(reader, req), ==, 0);
+  verify_req(reader, req, 0);
+
+  for (size_t i = 1; i < trace_length; i++) {
+    g_assert_cmpint(read_one_req(reader, req), ==, 0);
+  }
+  verify_req(reader, req, -1);
+
+  g_assert_cmpint(read_one_req(reader, req), ==, 0);
+  verify_req(reader, req, 0);
+
+  reset_reader(reader);
+  g_assert_cmpint(read_one_req(reader, req), ==, 0);
+  verify_req(reader, req, 0);
+
+  reader_t *cloned_reader = clone_reader(reader);
+  g_assert_cmpint(get_num_of_req(cloned_reader), ==, trace_length * 2);
+  g_assert_cmpint(read_one_req(cloned_reader, req), ==, 0);
+  verify_req(cloned_reader, req, 0);
+  close_reader(cloned_reader);
+
+  free_request(req);
+}
+
 void test_twr(gconstpointer user_data) {
   reader_t *reader = setup_reader("/Users/junchengy/twr.sbin", TWR_TRACE, NULL);
   gint64 n_req = get_num_of_req(reader);
@@ -207,6 +238,10 @@ int main(int argc, char *argv[]) {
                        test_reader_more1);
   g_test_add_data_func_full("/libCacheSim/reader_more2_oracleGeneral", reader,
                             test_reader_more2, test_teardown);
+
+  reader = setup_mix_oracleGeneral_reader();
+  g_test_add_data_func_full("/libCacheSim/reader_mix_oracleGeneral", reader,
+                            test_mix_reader, test_teardown);
 
   // g_test_add_data_func("/libCacheSim/test_twr", NULL, test_twr);
   return g_test_run();

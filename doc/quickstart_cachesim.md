@@ -125,8 +125,13 @@ Besides csv trace, we also support txt trace and binary trace.
 
 # oracleGeneral is a binary format that stores time, obj-id, size, next-access-time (in reference count)
 ./cachesim ../data/trace.oracleGeneral.bin oracleGeneral lru 1gb
+
+# mix concatenates multiple traces in order; paths are comma-separated inside one argument
+./cachesim "/mnt/cfs/oracleReuse/sample/cluster1.oracleGeneral.sample10.zst,/mnt/cfs/oracleReuse/sample/cluster2.oracleGeneral.sample10.zst" mix s3fifo 0.01
 ```
 **We recommend using binary trace because it can be a few times faster than csv trace and uses less DRAM resources.**
+
+The mix reader is intended for online algorithms such as FIFO, LRU, and S3FIFO. For traces that embed future-access metadata such as oracleGeneral, the reader preserves each sub-trace's metadata and only concatenates the request stream.
 
 
 

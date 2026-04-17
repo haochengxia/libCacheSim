@@ -1,0 +1,4 @@
+trace_name,trace_path,n_req,miss_ratio,throughput_mqps
+cluster10.oracleGeneral.sample10.zst,/mnt/cfs/oracleReuse/sample/cluster10.oracleGeneral.sample10.zst,13916365,0.499900,2.0000
+cluster13.oracleGeneral.sample10.zst,/mnt/cfs/oracleReuse/sample/cluster13.oracleGeneral.sample10.zst,82546107,0.628400,1.8100
+cluster3.oracleGeneral.sample10.zst,/mnt/cfs/oracleReuse/sample/cluster3.oracleGeneral.sample10.zst,86950524,0.007200,5.8900

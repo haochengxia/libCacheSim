@@ -1,0 +1,4 @@
+pair_id,trace1_path,trace2_path
+1,/mnt/cfs/oracleReuse/sample/cluster10.oracleGeneral.sample10.zst,/mnt/cfs/oracleReuse/sample/cluster13.oracleGeneral.sample10.zst
+2,/mnt/cfs/oracleReuse/sample/cluster10.oracleGeneral.sample10.zst,/mnt/cfs/oracleReuse/sample/cluster3.oracleGeneral.sample10.zst
+3,/mnt/cfs/oracleReuse/sample/cluster13.oracleGeneral.sample10.zst,/mnt/cfs/oracleReuse/sample/cluster3.oracleGeneral.sample10.zst

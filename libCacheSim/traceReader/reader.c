@@ -9,6 +9,7 @@
 #include <ctype.h>
 
 #include "customizedReader/lcs.h"
+#include "customizedReader/mix.h"
 #include "customizedReader/oracle/oracleGeneralBin.h"
 #include "customizedReader/oracle/oracleTwrBin.h"
 #include "customizedReader/oracle/oracleTwrNSBin.h"
@@ -49,22 +50,6 @@ reader_t *setup_reader(const char *const trace_path,
   reader_t *const reader = (reader_t *)malloc(sizeof(reader_t));
   memset(reader, 0, sizeof(reader_t));
   reader->reader_params = NULL;
-
-  /* check whether the trace is a zstd trace file,
-   * currently zstd reader only supports a few binary trace */
-  reader->is_zstd_file = false;
-  reader->zstd_reader_p = NULL;
-#ifdef SUPPORT_ZSTD_TRACE
-  size_t slen = strlen(trace_path);
-  if (strncmp(trace_path + (slen - 4), ".zst", 4) == 0) {
-    reader->is_zstd_file = true;
-    reader->zstd_reader_p = create_zstd_reader(trace_path);
-    if (!_info_printed) {
-      VERBOSE("opening a zstd compressed data\n");
-    }
-  }
-#endif
-
   reader->trace_format = INVALID_TRACE_FORMAT;
   reader->trace_type = trace_type;
   reader->n_total_req = 0;
@@ -104,6 +89,27 @@ reader_t *setup_reader(const char *const trace_path,
 
   assert(trace_path != NULL);
   reader->trace_path = strdup(trace_path);
+
+  if (trace_type == MIX_TRACE) {
+    reader->trace_type = trace_type;
+    mix_setup_reader(reader);
+    return reader;
+  }
+
+  /* check whether the trace is a zstd trace file,
+   * currently zstd reader only supports a few binary trace */
+  reader->is_zstd_file = false;
+  reader->zstd_reader_p = NULL;
+#ifdef SUPPORT_ZSTD_TRACE
+  size_t slen = strlen(trace_path);
+  if (strncmp(trace_path + (slen - 4), ".zst", 4) == 0) {
+    reader->is_zstd_file = true;
+    reader->zstd_reader_p = create_zstd_reader(trace_path);
+    if (!_info_printed) {
+      VERBOSE("opening a zstd compressed data\n");
+    }
+  }
+#endif
 
   if ((fd = open(trace_path, O_RDONLY)) < 0) {
     ERROR("Unable to open '%s', %s\n", trace_path, strerror(errno));
@@ -234,7 +240,7 @@ reader_t *setup_reader(const char *const trace_path,
  * @return 0 if success, 1 if end of file
  */
 int read_one_req(reader_t *const reader, request_t *const req) {
-  if (reader->mmap_offset >= reader->file_size) {
+  if (reader->trace_type != MIX_TRACE && reader->mmap_offset >= reader->file_size) {
     DEBUG("read_one_req: end of file, current mmap_offset %zu, file size %zu\n",
           reader->mmap_offset, reader->file_size);
     req->valid = false;
@@ -255,7 +261,6 @@ int read_one_req(reader_t *const reader, request_t *const req) {
     req->clock_time = reader->last_req_clock_time;
 
   } else {
-    reader->n_read_req += 1;
     req->hv = 0;
     req->ttl = 0;
     req->valid = true;
@@ -299,12 +304,19 @@ int read_one_req(reader_t *const reader, request_t *const req) {
       case VALPIN_TRACE:
         status = valpin_read_one_req(reader, req);
         break;
+      case MIX_TRACE:
+        status = mix_read_one_req(reader, req);
+        break;
       default:
         ERROR(
             "cannot recognize reader trace_type, given reader trace_type: "
             "%c\n",
             reader->trace_type);
         abort();
+    }
+
+    if (status == 0) {
+      reader->n_read_req += 1;
     }
   }
 
@@ -458,6 +470,20 @@ int skip_n_req(reader_t *reader, const int N) {
   char **buf = &reader->line_buf;
   size_t *buf_size_ptr = &reader->line_buf_size;
 
+  if (reader->trace_type == MIX_TRACE) {
+    request_t *req = new_request();
+    count = 0;
+    while (count < N && read_one_req(reader, req) == 0) {
+      count += 1;
+    }
+    if (count < N) {
+      WARN("try to skip %d requests, but only %d requests left\n", N, count);
+    }
+    free_request(req);
+    VERBOSE("skip %d requests\n", count);
+    return count;
+  }
+
   if (reader->trace_format == TXT_TRACE_FORMAT) {
     for (int i = 0; i < N; i++) {
       if (getline(buf, buf_size_ptr, reader->file) == -1) {
@@ -488,6 +514,12 @@ void reset_reader(reader_t *const reader) {
   long curr_offset = 0;
   reader->n_read_req = 0;
 
+  if (reader->trace_type == MIX_TRACE) {
+    mix_reset_reader(reader);
+    DEBUG("reset reader current offset %ld\n", curr_offset);
+    return;
+  }
+
 #ifdef SUPPORT_ZSTD_TRACE
   if (reader->is_zstd_file) {
     reset_zstd_reader(reader->zstd_reader_p);
@@ -512,6 +544,8 @@ void reset_reader(reader_t *const reader) {
 }
 
 int64_t get_num_of_req(reader_t *const reader) {
+  if (reader->trace_type == MIX_TRACE) return mix_get_num_of_req(reader);
+
   if (reader->n_total_req > 0) return reader->n_total_req;
 
   int64_t n_req = 0;
@@ -554,7 +588,9 @@ int close_reader(reader_t *const reader) {
    indicate the error.  In either case no further
    access to the stream is possible.*/
 
-  if (reader->trace_type == PLAIN_TXT_TRACE) {
+  if (reader->trace_type == MIX_TRACE) {
+    mix_close_reader(reader);
+  } else if (reader->trace_type == PLAIN_TXT_TRACE) {
     fclose(reader->file);
     free(reader->line_buf);
   } else if (reader->trace_type == CSV_TRACE) {
@@ -632,6 +668,14 @@ void reader_set_read_pos(reader_t *const reader, double pos) {
 }
 
 void read_first_req(reader_t *reader, request_t *req) {
+  if (reader->trace_type == MIX_TRACE) {
+    reader_t *cloned_reader = clone_reader(reader);
+    reset_reader(cloned_reader);
+    read_one_req(cloned_reader, req);
+    close_reader(cloned_reader);
+    return;
+  }
+
   uint64_t offset = reader->mmap_offset;
   reset_reader(reader);
   read_one_req(reader, req);
@@ -639,6 +683,21 @@ void read_first_req(reader_t *reader, request_t *req) {
 }
 
 void read_last_req(reader_t *reader, request_t *req) {
+  if (reader->trace_type == MIX_TRACE) {
+    reader_t *cloned_reader = clone_reader(reader);
+    request_t *req_local = new_request();
+    req->valid = false;
+
+    reset_reader(cloned_reader);
+    while (read_one_req(cloned_reader, req_local) == 0) {
+      copy_request(req, req_local);
+    }
+
+    free_request(req_local);
+    close_reader(cloned_reader);
+    return;
+  }
+
   uint64_t offset = reader->mmap_offset;
   reset_reader(reader);
   reader_set_read_pos(reader, 1.0);
