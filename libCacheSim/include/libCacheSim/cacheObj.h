@@ -133,6 +133,13 @@ typedef struct {
 } S3FIFO_obj_metadata_t;
 
 typedef struct {
+  int64_t insertion_time;
+  int64_t freq;
+  int32_t main_insert_freq;
+  int32_t insert_bucket;  // bucket index for hit position tracking
+} S4FIFO_obj_metadata_t;
+
+typedef struct {
   // int32_t freq;
   int lru_id;
   bool reference;
@@ -166,6 +173,9 @@ typedef struct cache_obj {
   int64_t create_time;
 #endif
 
+  /* used by S4FIFO */
+  int64_t time_stamp;
+
   union {
     LFU_obj_metadata_t lfu;            // for LFU
     Clock_obj_metadata_t clock;        // for Clock
@@ -186,6 +196,7 @@ typedef struct cache_obj {
     QDLP_obj_metadata_t QDLP;
     LIRS_obj_metadata_t LIRS;
     S3FIFO_obj_metadata_t S3FIFO;
+    S4FIFO_obj_metadata_t S4FIFO;
     Sieve_obj_params_t sieve;
     CAR_obj_metadata_t CAR;
 

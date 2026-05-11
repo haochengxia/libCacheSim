@@ -1,0 +1,4 @@
+/mnt/cfs/oracleReuse/wiki/wiki.2007.oracleGeneral.bin.zst
+/mnt/cfs/oracleReuse/tencentPhoto/tencent_photo2.oracleGeneral.zst
+/mnt/cfs/oracleReuse/tencentPhoto/tencent_photo1.oracleGeneral.zst
+/mnt/cfs/oracleReuse/metaKV/202312_kv_traces_all.csv.oracleGeneral.zst

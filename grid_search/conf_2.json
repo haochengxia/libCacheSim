@@ -1,0 +1,25 @@
+{
+    "ghost_to_main_thresh": {
+        "0": "Hit & Promote"
+    },
+    "small_skip_ratio": {
+        "0.0": "Off",
+        "0.1": "Light Filter",
+        "0.25": "Anti-Scan"
+    },
+    "ghost_size_ratio": {
+        "3": "Fixed. Maximize history info.",
+        "6": "Large. Maximize history info."
+    },
+    "small_size_ratio": {
+        "0.01": "Extra Small",
+        "0.05": "Static/Stable",
+        "0.1": "Default",
+        "0.2": "Dynamic/Churn"
+    },
+    "move_to_main_thresh": {
+        "1": "Recency-friendly",
+        "2": "Balanced",
+        "4": "Scan-resistant"
+    }
+}

@@ -1,0 +1,3 @@
+/mnt/cfs/oracleReuse/cphy/w86.oracleGeneral.bin.zst
+/mnt/cfs/oracleReuse/tencentBlock/tencentBlock.ns9969.oracleGeneral.zst
+/mnt/cfs/oracleReuse/cf/cf_colo28.ns16.oracleGeneral.zst
