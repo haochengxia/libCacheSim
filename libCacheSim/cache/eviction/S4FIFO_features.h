@@ -348,6 +348,16 @@ static inline void feature_collector_get_features(
   hit_pos_tracker_get_histogram(&fc->ghost_tracker, fv->hist_ghost);
 }
 
+static inline void feature_collector_reset(S4FIFO_feature_collector_t *fc,
+                                           int64_t cache_capacity,
+                                           int64_t small_size,
+                                           int64_t main_size,
+                                           int64_t ghost_size,
+                                           int32_t num_buckets) {
+  feature_collector_init(fc, cache_capacity, small_size, main_size, ghost_size,
+                         num_buckets);
+}
+
 /**
  * @brief Print feature vector
  */
