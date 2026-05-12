@@ -474,6 +474,7 @@ static void S4FIFO_verify_parse_params(cache_t *cache,
     } else if (strcasecmp(key, "dump-file") == 0) {
       strncpy(params->dump_file_path, value,
               sizeof(params->dump_file_path) - 1);
+      params->dump_file_path[sizeof(params->dump_file_path) - 1] = '\0';
     } else if (strcasecmp(key, "collect-req") == 0) {
       params->collect_req = atol(value);
     } else if (strcasecmp(key, "n-buckets") == 0) {
@@ -486,9 +487,11 @@ static void S4FIFO_verify_parse_params(cache_t *cache,
              params->base.move_to_main_threshold,
              params->dump_hit_pos ? "true" : "false",
              params->collect_req, params->n_buckets);
+      free(old_params_str);
       exit(0);
     } else {
       ERROR("%s does not have parameter %s\n", cache->cache_name, key);
+      free(old_params_str);
       exit(1);
     }
   }

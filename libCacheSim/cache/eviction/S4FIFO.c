@@ -477,12 +477,15 @@ static void S4FIFO_parse_params(cache_t *cache,
     } else if (strcasecmp(key, "dump-file") == 0) {
       strncpy(params->dump_file_path, value,
               sizeof(params->dump_file_path) - 1);
+      params->dump_file_path[sizeof(params->dump_file_path) - 1] = '\0';
     } else if (strcasecmp(key, "print") == 0) {
       printf("parameters: %s\n",
              S4FIFO_shared_current_params(&params->base));
+      free(old_params_str);
       exit(0);
     } else {
       ERROR("%s does not have parameter %s\n", cache->cache_name, key);
+      free(old_params_str);
       exit(1);
     }
   }
