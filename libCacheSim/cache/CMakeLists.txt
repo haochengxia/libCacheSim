@@ -47,6 +47,7 @@ set(eviction_sources_c
         eviction/MRU.c
         eviction/nop.c
         eviction/plugin_cache.c  # plugin cache that allows user to implement custom cache
+        eviction/evictionAlgoRegistry.c   # allow extra module registry
         eviction/QDLP.c
         eviction/Random.c
         eviction/RandomLRU.c
@@ -83,7 +84,7 @@ set(eviction_sources_cpp
 
 # LRB
 if (ENABLE_LRB)
-    set (eviction_sources_cpp ${eviction_sources_cpp} 
+    set (eviction_sources_cpp ${eviction_sources_cpp}
         eviction/LRB/lrb.cpp
         eviction/LRB/LRB_Interface.cpp
         )
@@ -91,7 +92,7 @@ endif()
 
 # 3L Cache
 if (ENABLE_3L_CACHE)
-    set (eviction_sources_cpp ${eviction_sources_cpp} 
+    set (eviction_sources_cpp ${eviction_sources_cpp}
         eviction/3LCache/ThreeLCache_Interface.cpp
         eviction/3LCache/ThreeLCache.cpp
         )
@@ -99,8 +100,8 @@ endif()
 
 # GLCache
 if (ENABLE_GLCACHE)
-    set(eviction_sources_c 
-        ${eviction_sources_c} 
+    set(eviction_sources_c
+        ${eviction_sources_c}
         eviction/GLCache/bucket.c
         eviction/GLCache/dataPrep.c
         eviction/GLCache/eviction.c
@@ -136,6 +137,96 @@ set(cache_sources_c
     cache.c
     plugin.c
 )
+
+# Extra module begin - will invoke functions in ExtraModules.cmake
+include(${CMAKE_SOURCE_DIR}/cmake/LibCacheSimExtraModules.cmake)
+
+if(LIBCACHESIM_EXTRA_MODULES_PATH)
+  foreach(extra_path IN LISTS LIBCACHESIM_EXTRA_MODULES_PATH)
+    if(NOT IS_DIRECTORY "${extra_path}")
+      message(FATAL_ERROR
+        "LIBCACHESIM_EXTRA_MODULES_PATH entry does not exist: ${extra_path}")
+    endif()
+
+    if(EXISTS "${extra_path}/CMakeLists.txt")
+      get_filename_component(module_name "${extra_path}" NAME)
+      message(STATUS "Adding libCacheSim extra module: ${extra_path}")
+      add_subdirectory(
+        "${extra_path}"
+        "${CMAKE_BINARY_DIR}/libcachesim_extra_modules/${module_name}"
+      )
+    else()
+      file(GLOB children RELATIVE "${extra_path}" "${extra_path}/*")
+      foreach(child ${children})
+        set(module_dir "${extra_path}/${child}")
+        if(IS_DIRECTORY "${module_dir}" AND EXISTS "${module_dir}/CMakeLists.txt")
+          message(STATUS "Adding libCacheSim extra module: ${module_dir}")
+          add_subdirectory(
+            "${module_dir}"
+            "${CMAKE_BINARY_DIR}/libcachesim_extra_modules/${child}"
+          )
+        endif()
+      endforeach()
+    endif()
+  endforeach()
+endif()
+
+get_property(LIBCACHESIM_EXTRA_C_SOURCES
+  GLOBAL PROPERTY LIBCACHESIM_EXTRA_C_SOURCES)
+
+if(LIBCACHESIM_EXTRA_C_SOURCES)
+  list(APPEND cache_sources_c ${LIBCACHESIM_EXTRA_C_SOURCES})
+endif()
+
+get_property(LIBCACHESIM_EXTRA_ALGO_DECLS_LIST
+  GLOBAL PROPERTY LIBCACHESIM_EXTRA_ALGO_DECLS)
+
+get_property(LIBCACHESIM_EXTRA_ALGO_REGS_LIST
+  GLOBAL PROPERTY LIBCACHESIM_EXTRA_ALGO_REGS)
+
+if(LIBCACHESIM_EXTRA_ALGO_DECLS_LIST)
+  string(JOIN "\n" LIBCACHESIM_EXTRA_ALGO_DECLS
+    ${LIBCACHESIM_EXTRA_ALGO_DECLS_LIST})
+else()
+  set(LIBCACHESIM_EXTRA_ALGO_DECLS "")
+endif()
+
+if(LIBCACHESIM_EXTRA_ALGO_REGS_LIST)
+get_property(LIBCACHESIM_EXTRA_ALGO_DECLS_LIST
+  GLOBAL PROPERTY LIBCACHESIM_EXTRA_ALGO_DECLS)
+
+get_property(LIBCACHESIM_EXTRA_ALGO_REGS_LIST
+  GLOBAL PROPERTY LIBCACHESIM_EXTRA_ALGO_REGS)
+
+set(LIBCACHESIM_EXTRA_ALGO_DECLS "")
+if(LIBCACHESIM_EXTRA_ALGO_DECLS_LIST)
+  foreach(decl IN LISTS LIBCACHESIM_EXTRA_ALGO_DECLS_LIST)
+    string(APPEND LIBCACHESIM_EXTRA_ALGO_DECLS "${decl};\n")
+  endforeach()
+endif()
+
+set(LIBCACHESIM_EXTRA_ALGO_REGS "")
+if(LIBCACHESIM_EXTRA_ALGO_REGS_LIST)
+  foreach(reg IN LISTS LIBCACHESIM_EXTRA_ALGO_REGS_LIST)
+    string(APPEND LIBCACHESIM_EXTRA_ALGO_REGS "${reg};\n")
+  endforeach()
+endif()
+else()
+  set(LIBCACHESIM_EXTRA_ALGO_REGS "")
+endif()
+
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
+
+configure_file(
+  "${CMAKE_SOURCE_DIR}/cmake/libcachesim_extra_registry.c.in"
+  "${CMAKE_BINARY_DIR}/generated/libcachesim_extra_registry.c"
+  @ONLY
+)
+
+list(APPEND cache_sources_c
+  "${CMAKE_BINARY_DIR}/generated/libcachesim_extra_registry.c"
+)
+# Extra module end
 
 set(cache_sources_cpp
     ${admission_sources_cpp}
@@ -176,6 +267,15 @@ target_include_directories(cache_lib_cpp PRIVATE
     ${GLib_INCLUDE_DIRS}
     ${libCacheSim_include_dir}
 )
+
+# extra module include
+get_property(LIBCACHESIM_EXTRA_INCLUDE_DIRS
+  GLOBAL PROPERTY LIBCACHESIM_EXTRA_INCLUDE_DIRS)
+if(LIBCACHESIM_EXTRA_INCLUDE_DIRS)
+  target_include_directories(cache_lib_c PRIVATE
+    ${LIBCACHESIM_EXTRA_INCLUDE_DIRS}
+  )
+endif()
 
 target_link_libraries(cache_lib_c PRIVATE dataStructure_lib utils_lib ${dependency_libs})
 target_link_libraries(cache_lib_cpp PRIVATE dataStructure_lib utils_lib ${dependency_libs})
