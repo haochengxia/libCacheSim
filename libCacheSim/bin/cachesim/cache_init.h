@@ -9,7 +9,7 @@
 
 #include "libCacheSim/cache.h"
 #include "libCacheSim/evictionAlgo.h"
-#include "libCacheSim/evictionAlgoRegistry.h" // register extra mod algos
+#include "libCacheSim/evictionAlgoRegistry.h"  // register extra mod algos
 
 #ifdef __cplusplus
 extern "C" {
@@ -90,7 +90,7 @@ static inline cache_t *create_cache(const char *trace_path,
 #endif
   };
 
-libcachesim_register_extra_eviction_algos();
+  libcachesim_register_extra_eviction_algos();
 
   cache_t *(*init_func)(common_cache_params_t, const char *) = NULL;
   for (size_t i = 0; i < sizeof(simple_algos) / sizeof(simple_algos[0]); ++i) {
@@ -152,7 +152,8 @@ libcachesim_register_extra_eviction_algos();
     cc_params.hashpower = MAX(cc_params.hashpower - 8, 16);
     cache = BeladySize_init(cc_params, eviction_params);
   } else if (libcachesim_find_eviction_algo(eviction_algo) != NULL) {
-    eviction_algo_init_fn_t init_fn = libcachesim_find_eviction_algo(eviction_algo);
+    eviction_algo_init_fn_t init_fn =
+        libcachesim_find_eviction_algo(eviction_algo);
     cache = init_fn(cc_params, eviction_params);
   } else {
     ERROR("do not support algorithm %s\n", eviction_algo);
