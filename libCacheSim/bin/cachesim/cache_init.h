@@ -9,6 +9,7 @@
 
 #include "libCacheSim/cache.h"
 #include "libCacheSim/evictionAlgo.h"
+#include "libCacheSim/evictionAlgoModFactory.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -148,11 +149,13 @@ static inline cache_t *create_cache(const char *trace_path,
     }
     cc_params.hashpower = MAX(cc_params.hashpower - 8, 16);
     cache = BeladySize_init(cc_params, eviction_params);
+  } else if ((cache = create_cache_from_eviction_algo_module(
+                  eviction_algo, cc_params, eviction_params)) != NULL) {
+    // created by extra module
   } else {
     ERROR("do not support algorithm %s\n", eviction_algo);
     abort();
   }
-
   return cache;
 }
 
