@@ -13,6 +13,7 @@
 - [API Reference (C)](API.md)
 - [Performance Tuning](performance.md)
 - [Memory Usage Profiling](memory_usage_profiling.md)
+- [Extra Modules](advanced_extra_mod.md)
 
 ## Developer Documentation
 - [Debugging Guide](debug.md)
