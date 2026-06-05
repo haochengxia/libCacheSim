@@ -47,6 +47,7 @@ set(eviction_sources_c
         eviction/MRU.c
         eviction/nop.c
         eviction/plugin_cache.c  # plugin cache that allows user to implement custom cache
+        eviction/evictionAlgoRegistry.c   # allow extra module registry
         eviction/QDLP.c
         eviction/Random.c
         eviction/RandomLRU.c
@@ -83,7 +84,7 @@ set(eviction_sources_cpp
 
 # LRB
 if (ENABLE_LRB)
-    set (eviction_sources_cpp ${eviction_sources_cpp} 
+    set (eviction_sources_cpp ${eviction_sources_cpp}
         eviction/LRB/lrb.cpp
         eviction/LRB/LRB_Interface.cpp
         )
@@ -91,7 +92,7 @@ endif()
 
 # 3L Cache
 if (ENABLE_3L_CACHE)
-    set (eviction_sources_cpp ${eviction_sources_cpp} 
+    set (eviction_sources_cpp ${eviction_sources_cpp}
         eviction/3LCache/ThreeLCache_Interface.cpp
         eviction/3LCache/ThreeLCache.cpp
         )
@@ -99,8 +100,8 @@ endif()
 
 # GLCache
 if (ENABLE_GLCACHE)
-    set(eviction_sources_c 
-        ${eviction_sources_c} 
+    set(eviction_sources_c
+        ${eviction_sources_c}
         eviction/GLCache/bucket.c
         eviction/GLCache/dataPrep.c
         eviction/GLCache/eviction.c
@@ -137,6 +138,10 @@ set(cache_sources_c
     plugin.c
 )
 
+include(${CMAKE_SOURCE_DIR}/cmake/LibCacheSimExtraModules.cmake)
+
+libcachesim_add_extra_modules_to_sources(cache_sources_c)
+
 set(cache_sources_cpp
     ${admission_sources_cpp}
     ${eviction_sources_cpp}
@@ -157,6 +162,8 @@ message(STATUS "cache_sources_cpp = ${cache_sources_cpp}")
 
 add_library(cache_lib_c OBJECT ${cache_sources_c})
 add_library(cache_lib_cpp OBJECT ${cache_sources_cpp})
+
+libcachesim_apply_extra_modules_to_target(cache_lib_c)
 
 # Set target-specific compiler flags
 target_compile_options(cache_lib_c PRIVATE

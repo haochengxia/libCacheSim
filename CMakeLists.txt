@@ -29,6 +29,8 @@ option(ENABLE_3L_CACHE "enable 3LCache" OFF)
 option(BUILD_SHARED_LIBS "build shared library" ON)
 set(LOG_LEVEL "default" CACHE STRING "change the logging level")
 set_property(CACHE LOG_LEVEL PROPERTY STRINGS ERROR WARN INFO DEBUG VERBOSE DEFAULT)
+set(LIBCACHESIM_EXTRA_MODULES_PATH "" CACHE STRING
+    "Semicolon-separated list of extra libCacheSim module directories")
 
 # Platform detection
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
