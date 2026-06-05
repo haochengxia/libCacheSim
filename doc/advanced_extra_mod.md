@@ -407,3 +407,6 @@ Run:
 ```bash
 ./build/bin/cachesim ./data/cloudPhysicsIO.txt txt ModMRU 0.1
 ```
+
+> [!TIP]
+> Avoid the conflicts between your header files and the included header files from original libCacheSim. You can name it as `<you_mod_name>_<purpose>.h`.
