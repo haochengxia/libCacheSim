@@ -65,6 +65,7 @@ The name in `code` is what you pass to `cachesim` on the command line (names are
 * [WTinyLFU](/libCacheSim/cache/eviction/WTinyLFU.c) `wtinylfu`
 * [QD-LP](/libCacheSim/cache/eviction/QDLP.c) `qdlp`
 * [S3-FIFO](/libCacheSim/cache/eviction/S3FIFO.c) `s3fifo`, [S3-FIFOd](/libCacheSim/cache/eviction/S3FIFOd.c) `s3fifod`
+* [S4-FIFO](/libCacheSim/cache/eviction/S4FIFO.c) `s4fifo` — S3-FIFO generalized with a tunable ghost-promotion threshold and small-queue skip ratio; defaults to S3-FIFO's behavior
 * [Sieve](/libCacheSim/cache/eviction/Sieve.c) `sieve`
 
 ### Admission algorithms
