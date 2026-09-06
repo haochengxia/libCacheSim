@@ -10,6 +10,12 @@
 #include "S4FIFO_predictor.h"
 
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "S4FIFO_model_real.h"
+#include "libCacheSim/logging.h"
 
 // The vendored model is its own translation unit: it's ~8.3MB of generated,
 // header-only/static code and must never be #included from more than one
@@ -106,6 +112,23 @@ static void s4fifo_prepare_model_input(const S4FIFO_feature_vector_t *fv,
   input[74] = (double)fv->total_requests;
 }
 
+// Same feature engineering as s4fifo_prepare_model_input(), minus the two
+// entries (log_C, ratio_estimate) the real model's feature set doesn't
+// include - see model_metadata.json's feature_columns on the HF Space this
+// was ported from. Re-derives the 75-feature vector and drops indices 66
+// and 68 rather than duplicating the derivation math, so the two backends
+// can never silently drift apart on the features they share.
+static void s4fifo_prepare_model_input73(const S4FIFO_feature_vector_t *fv,
+                                         double *input73 /* [73] */) {
+  double input75[S4FIFO_MODEL_N_FEATURES];
+  s4fifo_prepare_model_input(fv, input75);
+  int j = 0;
+  for (int i = 0; i < S4FIFO_MODEL_N_FEATURES; i++) {
+    if (i == 66 || i == 68) continue;  // log_C, ratio_estimate
+    input73[j++] = input75[i];
+  }
+}
+
 bool s4fifo_predict(const S4FIFO_feature_vector_t *fv, S4FIFOConfigEntry *out) {
   if (fv->total_requests < S4FIFO_PREDICT_MIN_REQUESTS ||
       fv->total_hits < S4FIFO_PREDICT_MIN_HITS) {
@@ -122,6 +145,33 @@ bool s4fifo_predict(const S4FIFO_feature_vector_t *fv, S4FIFOConfigEntry *out) {
 
   *out = kS4FIFOConfigs[class_id];
   return true;
+}
+
+const S4FIFOConfigEntry *s4fifo_get_config_table(void) { return kS4FIFOConfigs; }
+
+bool s4fifo_predict_auto(const S4FIFO_feature_vector_t *fv,
+                         const char *model_path, S4FIFOConfigEntry *out) {
+  if (fv->total_requests < S4FIFO_PREDICT_MIN_REQUESTS ||
+      fv->total_hits < S4FIFO_PREDICT_MIN_HITS) {
+    return false;
+  }
+
+  if (model_path != NULL && model_path[0] != '\0') {
+    if (s4fifo_real_model_load(model_path)) {
+      double input73[73];
+      s4fifo_prepare_model_input73(fv, input73);
+      if (s4fifo_real_model_predict(input73, out)) {
+        return true;
+      }
+      WARN("S4FIFO: real model at %s produced no prediction, "
+           "falling back to the lite model\n", model_path);
+    } else {
+      WARN_ONCE("S4FIFO: failed to load real model at %s, "
+                "falling back to the lite model\n", model_path);
+    }
+  }
+
+  return s4fifo_predict(fv, out);
 }
 
 #ifdef __cplusplus

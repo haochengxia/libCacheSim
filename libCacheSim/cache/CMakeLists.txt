@@ -105,6 +105,7 @@ endif()
 if (ENABLE_S4FIFO_LEARNED)
     set(eviction_sources_c ${eviction_sources_c}
         eviction/S4FIFO_predictor.c
+        eviction/S4FIFO_model_real.c
         )
 endif()
 

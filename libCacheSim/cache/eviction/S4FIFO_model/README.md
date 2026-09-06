@@ -37,3 +37,30 @@ S4FIFO's optional learned control plane (`auto-tune=1`).
 These are `static`/header-only and must only ever be `#include`d from a
 single translation unit (`S4FIFO_predictor.c`) — they are not meant to be
 compiled as standalone sources.
+
+## The real model (recommended over this lite one)
+
+The full production model (20 models, 140,400 trees) is meaningfully more
+accurate than this lite one — on a 271-point real-production-trace
+evaluation it beat static S4FIFO in 64.2% of cases (vs. the lite model's
+roughly coin-flip result) and beat the lite model directly in 55.7%. It's
+too large to vendor as C source (m2cgen-style expansion is >1GB for this
+many trees), so it isn't compiled in here. Instead:
+
+- **Model file**: a compact, dependency-free binary re-serialization
+  (~189MB, format documented in `S4FIFO_model_real.c`'s header comment) is
+  hosted at [harvardMadsys/s4fifo-control-plane-model](https://huggingface.co/harvardMadsys/s4fifo-control-plane-model)
+  (private — request access, or ask an org member for an HF token that can
+  read it).
+- **Loader/evaluator**: `S4FIFO_model_real.c` (~250 lines, no ML runtime
+  dependency, just array-walking).
+- **Usage**: `auto-tune=1,model-path=/path/to/s4fifo_model.s4m` instead of
+  just `auto-tune=1`. Falls back to this lite model if the path is
+  unset/unreadable.
+- **Regenerating it yourself**: `scripts/s4fifo_export_model.py` (needs
+  `joblib`, `scikit-learn`, `lightgbm`, `numpy`) converts the original
+  372MB joblib ensemble (from
+  [hxia7/s4fifo-api](https://huggingface.co/spaces/hxia7/s4fifo-api)) plus
+  its `cost_matrix.npy` into this format. Validated to pick the identical
+  class as the live model API on every one of 14 real-trace feature
+  vectors tested.

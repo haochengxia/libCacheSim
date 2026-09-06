@@ -92,6 +92,10 @@ typedef struct {
   // to the small FIFO.
   bool seen_in_ghost_not_promoted;
   S4FIFO_feature_collector_t *feature_collector;
+  // optional: path to the real, much larger model (see S4FIFO_model_real.h)
+  // to use instead of the compiled-in lite one. Empty means "use the lite
+  // model" - this is the default and requires no setup.
+  char model_path[256];
 #endif
 } S4FIFO_params_t;
 
@@ -718,7 +722,7 @@ static void S4FIFO_apply_predicted_config(cache_t *cache,
   S4FIFO_feature_collector_get_features(params->feature_collector, &fv);
 
   S4FIFOConfigEntry cfg;
-  if (!s4fifo_predict(&fv, &cfg)) {
+  if (!s4fifo_predict_auto(&fv, params->model_path, &cfg)) {
     INFO("%s: not enough data collected (requests=%lld, hits=%lld), "
          "keeping current configuration\n",
          cache->cache_name, (long long)fv.total_requests,
@@ -759,17 +763,18 @@ static void S4FIFO_apply_predicted_config(cache_t *cache,
 // ****                                                               ****
 // ***********************************************************************
 static const char *S4FIFO_current_params(S4FIFO_params_t *params) {
-  static __thread char params_str[256];
+  static __thread char params_str[512];
 #if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
   snprintf(params_str, sizeof(params_str),
            "small-size-ratio=%.4lf,ghost-size-ratio=%.4lf,move-to-main-"
            "threshold=%d,ghost-to-main-threshold=%d,small-skip-ratio=%.4lf,"
-           "auto-tune=%d,feature-collect-reqs=%lld,prediction-interval=%lld\n",
+           "auto-tune=%d,feature-collect-reqs=%lld,prediction-interval=%lld,"
+           "model-path=%s\n",
            params->small_size_ratio, params->ghost_size_ratio,
            params->move_to_main_threshold, params->ghost_to_main_threshold,
            params->small_skip_ratio, params->auto_tune,
            (long long)params->feature_collect_reqs,
-           (long long)params->prediction_interval);
+           (long long)params->prediction_interval, params->model_path);
 #else
   snprintf(params_str, sizeof(params_str),
            "small-size-ratio=%.4lf,ghost-size-ratio=%.4lf,move-to-main-"
@@ -817,6 +822,9 @@ static void S4FIFO_parse_params(cache_t *cache,
       params->feature_collect_reqs = strtoll(value, NULL, 10);
     } else if (strcasecmp(key, "prediction-interval") == 0) {
       params->prediction_interval = strtoll(value, NULL, 10);
+    } else if (strcasecmp(key, "model-path") == 0) {
+      strncpy(params->model_path, value, sizeof(params->model_path) - 1);
+      params->model_path[sizeof(params->model_path) - 1] = '\0';
 #endif
     } else if (strcasecmp(key, "print") == 0) {
       printf("parameters: %s\n", S4FIFO_current_params(params));
