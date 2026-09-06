@@ -14,20 +14,20 @@
 //  S4FIFO has the same 10% small FIFO + 90% main FIFO (2-bit Clock) +
 //  ghost FIFO structure as S3FIFO.c, plus two additional knobs:
 //
-//    - ghost-to-main-threshold (small_skip_ratio's ghost counterpart):
-//      S3-FIFO promotes an object straight to the main FIFO the first
-//      time it is re-requested while in the ghost queue. S4FIFO instead
-//      requires `ghost-to-main-threshold` re-requests while in the ghost
-//      queue, tracked with a per-ghost-object counter, before promoting.
+//    - ghost-to-main-threshold: S3-FIFO promotes an object straight to the
+//      main FIFO the first time it is re-requested while in the ghost
+//      queue (threshold <= 0). With a positive threshold, a ghost hit
+//      never fast-tracks straight to main - the object is simply
+//      re-admitted to the small FIFO instead, like any other miss.
 //
 //    - small-skip-ratio: S3-FIFO counts every re-request to an object
 //      still in the small FIFO as a "hit" that counts towards promotion.
 //      S4FIFO instead ignores re-requests to objects that were inserted
 //      into the small FIFO very recently (within the most recent
-//      `small-skip-ratio` fraction of the small FIFO's capacity), which
-//      creates a virtual "probationary" region at the tail of the small
-//      FIFO and filters out quick re-requests (e.g. from scans) that
-//      would otherwise look like genuine reuse.
+//      `small-skip-ratio` fraction of the small FIFO's current object
+//      count), which creates a virtual "probationary" region at the tail
+//      of the small FIFO and filters out quick re-requests (e.g. from
+//      scans) that would otherwise look like genuine reuse.
 //
 //  With the defaults below (ghost-to-main-threshold=0, small-skip-ratio=0)
 //  both knobs are no-ops and S4FIFO behaves identically to S3FIFO.
@@ -39,8 +39,23 @@
 #include "dataStructure/hashtable/hashtable.h"
 #include "libCacheSim/evictionAlgo.h"
 
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+#include "S4FIFO_features.h"
+#include "S4FIFO_predictor.h"
+#endif
+
 #ifdef __cplusplus
 extern "C" {
+#endif
+
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+// See the "learned control plane" section near the bottom of this file for
+// how these phases are used.
+typedef enum {
+  S4FIFO_PHASE_WARMUP = 0,
+  S4FIFO_PHASE_FEATURE_COLLECT,
+  S4FIFO_PHASE_PREDICTING,
+} S4FIFO_phase_t;
 #endif
 
 typedef struct {
@@ -58,11 +73,38 @@ typedef struct {
   bool has_evicted;
   request_t *req_local;
   int64_t small_insert_seq;      // counts inserts into the small FIFO
+
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+  // Optional learned control plane ("auto-tune=1"): collects features for
+  // `feature_collect_reqs` requests, predicts a configuration once, applies
+  // it, and (if `prediction_interval` > 0) repeats every `prediction_interval`
+  // requests thereafter. NULL/unused unless auto-tune is enabled.
+  bool auto_tune;
+  S4FIFO_phase_t phase;
+  int64_t feature_collect_reqs;
+  int64_t prediction_interval;
+  int64_t phase_start_n_req;  // cache->n_req when the current phase began
+  int64_t main_insert_seq;    // counts inserts into the main FIFO
+  int64_t ghost_insert_seq;   // counts inserts into the ghost FIFO
+  // set when find() saw this request in the ghost FIFO but did not promote
+  // it straight to main (ghost_to_main_threshold > 0) - insert() uses this
+  // to avoid double-counting the object as "unique" when it's re-admitted
+  // to the small FIFO.
+  bool seen_in_ghost_not_promoted;
+  S4FIFO_feature_collector_t *feature_collector;
+#endif
 } S4FIFO_params_t;
 
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+static const char *DEFAULT_CACHE_PARAMS =
+    "small-size-ratio=0.10,ghost-size-ratio=0.90,move-to-main-threshold=2,"
+    "ghost-to-main-threshold=0,small-skip-ratio=0.00,auto-tune=0,"
+    "feature-collect-reqs=10000,prediction-interval=0";
+#else
 static const char *DEFAULT_CACHE_PARAMS =
     "small-size-ratio=0.10,ghost-size-ratio=0.90,move-to-main-threshold=2,"
     "ghost-to-main-threshold=0,small-skip-ratio=0.00";
+#endif
 
 // ***********************************************************************
 // ****                                                               ****
@@ -86,6 +128,12 @@ static void S4FIFO_parse_params(cache_t *cache,
 
 static void S4FIFO_evict_small(cache_t *cache, const request_t *req);
 static void S4FIFO_evict_main(cache_t *cache, const request_t *req);
+
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+static void S4FIFO_update_phase(cache_t *cache, S4FIFO_params_t *params);
+static void S4FIFO_apply_predicted_config(cache_t *cache,
+                                          S4FIFO_params_t *params);
+#endif
 
 // ***********************************************************************
 // ****                                                               ****
@@ -157,6 +205,21 @@ cache_t *S4FIFO_init(const common_cache_params_t ccache_params,
            params->small_size_ratio, params->move_to_main_threshold,
            params->ghost_to_main_threshold, params->small_skip_ratio);
 
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+  params->phase = S4FIFO_PHASE_WARMUP;
+  params->phase_start_n_req = 0;
+  if (params->auto_tune) {
+    params->feature_collector = malloc(sizeof(S4FIFO_feature_collector_t));
+    S4FIFO_feature_collector_init(
+        params->feature_collector, ccache_params.cache_size,
+        params->small_fifo->cache_size, params->main_fifo->cache_size,
+        params->ghost_fifo ? params->ghost_fifo->cache_size : 0,
+        S4FIFO_FEATURE_DEFAULT_BUCKETS);
+  } else {
+    params->feature_collector = NULL;
+  }
+#endif
+
   return cache;
 }
 
@@ -173,6 +236,11 @@ static void S4FIFO_free(cache_t *cache) {
     params->ghost_fifo->cache_free(params->ghost_fifo);
   }
   params->main_fifo->cache_free(params->main_fifo);
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+  if (params->feature_collector != NULL) {
+    free(params->feature_collector);
+  }
+#endif
   free(cache->eviction_params);
   cache_struct_free(cache);
 }
@@ -201,6 +269,15 @@ static bool S4FIFO_get(cache_t *cache, const request_t *req) {
   DEBUG_ASSERT(params->small_fifo->get_occupied_byte(params->small_fifo) +
                    params->main_fifo->get_occupied_byte(params->main_fifo) <=
                cache->cache_size);
+
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+  if (params->feature_collector != NULL) {
+    S4FIFO_update_phase(cache, params);
+    if (params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
+      S4FIFO_feature_collector_record_request(params->feature_collector);
+    }
+  }
+#endif
 
   bool cache_hit = cache_get_base(cache, req);
 
@@ -254,17 +331,30 @@ static cache_obj_t *S4FIFO_find(cache_t *cache, const request_t *req,
 
   /* update cache is true from now */
   params->hit_on_ghost = false;
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+  params->seen_in_ghost_not_promoted = false;
+#endif
   cache_obj_t *obj = params->small_fifo->find(params->small_fifo, req, true);
   if (obj != NULL) {
     // objects inserted within the last `small_skip_ratio` fraction of the
-    // small FIFO's capacity are in "probation" and re-requesting them does
-    // not count as a hit; this filters out immediate re-requests (e.g. from
-    // scans) that are not indicative of real reuse
-    int64_t probation_len =
-        (int64_t)(params->small_skip_ratio * params->small_fifo->cache_size);
+    // small FIFO's current object count are in "probation" and
+    // re-requesting them does not count as a hit; this filters out
+    // immediate re-requests (e.g. from scans) that are not indicative of
+    // real reuse
+    int64_t probation_len = (int64_t)(params->small_skip_ratio *
+                                      params->small_fifo->get_n_obj(
+                                          params->small_fifo));
     if (S4FIFO_small_fifo_age(params, obj) >= probation_len) {
       obj->S4FIFO.freq += 1;
     }
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+    if (params->feature_collector != NULL &&
+        params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
+      S4FIFO_feature_collector_record_hit_small(
+          params->feature_collector, obj->S4FIFO.insert_seq,
+          params->small_insert_seq);
+    }
+#endif
     return obj;
   }
 
@@ -273,17 +363,39 @@ static cache_obj_t *S4FIFO_find(cache_t *cache, const request_t *req,
     ghost_obj = params->ghost_fifo->find(params->ghost_fifo, req, false);
   }
   if (ghost_obj != NULL) {
-    if (ghost_obj->S4FIFO.freq >= params->ghost_to_main_threshold) {
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+    if (params->feature_collector != NULL &&
+        params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
+      S4FIFO_feature_collector_record_hit_ghost(
+          params->feature_collector, ghost_obj->S4FIFO.insert_seq,
+          ghost_obj->S4FIFO.insert_bucket, params->ghost_insert_seq);
+      S4FIFO_feature_collector_record_ghost_removal(params->feature_collector);
+    }
+#endif
+    if (params->ghost_to_main_threshold <= 0) {
       params->ghost_fifo->remove(params->ghost_fifo, req->obj_id);
       params->hit_on_ghost = true;
     } else {
-      ghost_obj->S4FIFO.freq += 1;
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+      params->seen_in_ghost_not_promoted = true;
+#endif
     }
+    // else: leave the entry in the ghost FIFO (it may be hit again before
+    // it naturally ages out) and fall through - the object is simply
+    // re-admitted to the small FIFO by S4FIFO_insert, like any other miss.
   }
 
   obj = params->main_fifo->find(params->main_fifo, req, true);
   if (obj != NULL) {
     obj->S4FIFO.freq += 1;
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+    if (params->feature_collector != NULL &&
+        params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
+      S4FIFO_feature_collector_record_hit_main(
+          params->feature_collector, obj->S4FIFO.insert_seq,
+          params->main_insert_seq);
+    }
+#endif
   }
 
   return obj;
@@ -311,6 +423,17 @@ static cache_obj_t *S4FIFO_insert(cache_t *cache, const request_t *req) {
     /* insert into main FIFO */
     params->hit_on_ghost = false;
     obj = main_fifo->insert(main_fifo, req);
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+    if (obj != NULL) {
+      obj->S4FIFO.insert_seq = params->main_insert_seq;
+      if (params->feature_collector != NULL &&
+          params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
+        S4FIFO_feature_collector_record_insert_main(params->feature_collector,
+                                                    params->main_insert_seq);
+      }
+      params->main_insert_seq++;
+    }
+#endif
   } else {
     /* insert into small fifo */
     // NOTE: Inserting an object whose size equals the size of small fifo is
@@ -324,9 +447,31 @@ static cache_obj_t *S4FIFO_insert(cache_t *cache, const request_t *req) {
     if (!params->has_evicted &&
         small_fifo->get_occupied_byte(small_fifo) >= small_fifo->cache_size) {
       obj = main_fifo->insert(main_fifo, req);
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+      if (obj != NULL) {
+        obj->S4FIFO.insert_seq = params->main_insert_seq;
+        if (params->feature_collector != NULL &&
+            params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
+          S4FIFO_feature_collector_record_insert_main(
+              params->feature_collector, params->main_insert_seq);
+        }
+        params->main_insert_seq++;
+      }
+#endif
     } else {
       obj = small_fifo->insert(small_fifo, req);
-      obj->S4FIFO.insert_seq = params->small_insert_seq++;
+      obj->S4FIFO.insert_seq = params->small_insert_seq;
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+      if (params->feature_collector != NULL &&
+          params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
+        S4FIFO_feature_collector_record_insert_small(params->feature_collector,
+                                                     params->small_insert_seq);
+        if (!params->seen_in_ghost_not_promoted) {
+          S4FIFO_feature_collector_record_unique(params->feature_collector);
+        }
+      }
+#endif
+      params->small_insert_seq++;
     }
   }
 
@@ -364,17 +509,42 @@ static void S4FIFO_evict_small(cache_t *cache, const request_t *req) {
     copy_cache_obj_to_request(params->req_local, obj_to_evict);
 
     if (obj_to_evict->S4FIFO.freq >= params->move_to_main_threshold) {
-      main_fifo->insert(main_fifo, params->req_local);
+      cache_obj_t *main_obj = main_fifo->insert(main_fifo, params->req_local);
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+      if (main_obj != NULL) {
+        main_obj->S4FIFO.insert_seq = params->main_insert_seq;
+        if (params->feature_collector != NULL &&
+            params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
+          S4FIFO_feature_collector_record_insert_main(params->feature_collector,
+                                                      params->main_insert_seq);
+        }
+        params->main_insert_seq++;
+      }
+#endif
     } else {
-      // insert to ghost, with a fresh ghost-hit counter
       if (ghost_fifo != NULL) {
         ghost_fifo->get(ghost_fifo, params->req_local);
-        cache_obj_t *ghost_obj =
-            ghost_fifo->find(ghost_fifo, params->req_local, false);
-        if (ghost_obj != NULL) {
-          ghost_obj->S4FIFO.freq = 0;
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+        if (params->feature_collector != NULL &&
+            params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
+          cache_obj_t *ghost_obj =
+              ghost_fifo->find(ghost_fifo, params->req_local, false);
+          if (ghost_obj != NULL) {
+            ghost_obj->S4FIFO.insert_seq = params->ghost_insert_seq;
+            ghost_obj->S4FIFO.insert_bucket =
+                S4FIFO_feature_collector_record_insert_ghost(
+                    params->feature_collector, params->ghost_insert_seq);
+            params->ghost_insert_seq++;
+          }
         }
+#endif
       }
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+      if (params->feature_collector != NULL &&
+          params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
+        S4FIFO_feature_collector_record_one_hit(params->feature_collector);
+      }
+#endif
       has_evicted = true;
     }
 
@@ -479,19 +649,135 @@ static inline bool S4FIFO_can_insert(cache_t *cache, const request_t *req) {
          cache_can_insert_default(cache, req);
 }
 
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+// ***********************************************************************
+// ****                                                               ****
+// ****      learned control plane ("auto-tune=1"), optional          ****
+// ****                                                               ****
+// ***********************************************************************
+
+/**
+ * @brief advance the WARMUP -> FEATURE_COLLECT -> PREDICTING phase machine,
+ * applying a prediction and (if `prediction_interval` > 0) looping back to
+ * FEATURE_COLLECT as needed. Called on every request; each phase does
+ * nothing until its own condition is met, so this is cheap.
+ */
+static void S4FIFO_update_phase(cache_t *cache, S4FIFO_params_t *params) {
+  int64_t n_req = cache->n_req;
+
+  if (params->phase == S4FIFO_PHASE_WARMUP) {
+    if (cache->get_occupied_byte(cache) >= cache->cache_size) {
+      params->phase = S4FIFO_PHASE_FEATURE_COLLECT;
+      params->phase_start_n_req = n_req;
+    }
+    return;
+  }
+
+  if (params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
+    if (n_req - params->phase_start_n_req < params->feature_collect_reqs) {
+      return;
+    }
+    S4FIFO_apply_predicted_config(cache, params);
+    params->phase = S4FIFO_PHASE_PREDICTING;
+    params->phase_start_n_req = n_req;
+    return;
+  }
+
+  // S4FIFO_PHASE_PREDICTING: prediction_interval <= 0 means "predict once
+  // and keep this configuration for the rest of the trace"
+  if (params->prediction_interval <= 0) {
+    return;
+  }
+  if (n_req - params->phase_start_n_req < params->prediction_interval) {
+    return;
+  }
+  S4FIFO_feature_collector_init(
+      params->feature_collector, cache->cache_size,
+      params->small_fifo->cache_size, params->main_fifo->cache_size,
+      params->ghost_fifo ? params->ghost_fifo->cache_size : 0,
+      S4FIFO_FEATURE_DEFAULT_BUCKETS);
+  params->phase = S4FIFO_PHASE_FEATURE_COLLECT;
+  params->phase_start_n_req = n_req;
+}
+
+/**
+ * @brief snapshot the currently-collected features, predict a
+ * configuration (see S4FIFO_predictor.h), and if the model was confident
+ * enough to produce one, apply it: the two threshold/skip knobs take
+ * effect immediately (they're read directly on every request), and the
+ * two size-ratio knobs are applied "lazily" - the sub-FIFOs' cache_size
+ * fields are updated to their new targets and the existing over-budget
+ * eviction logic in S4FIFO_evict_small/_main drains (or grows into) each
+ * one over subsequent requests, with no pause and no object migration.
+ * Each sub-FIFO's hashtable was already sized for the parent's full
+ * capacity at creation, so growing one is safe.
+ */
+static void S4FIFO_apply_predicted_config(cache_t *cache,
+                                          S4FIFO_params_t *params) {
+  S4FIFO_feature_vector_t fv;
+  S4FIFO_feature_collector_get_features(params->feature_collector, &fv);
+
+  S4FIFOConfigEntry cfg;
+  if (!s4fifo_predict(&fv, &cfg)) {
+    INFO("%s: not enough data collected (requests=%lld, hits=%lld), "
+         "keeping current configuration\n",
+         cache->cache_name, (long long)fv.total_requests,
+         (long long)fv.total_hits);
+    return;
+  }
+
+  INFO("%s: applying learned configuration small-size-ratio=%.4lf,"
+       "ghost-size-ratio=%.4lf,move-to-main-threshold=%d,"
+       "ghost-to-main-threshold=%d,small-skip-ratio=%.4lf\n",
+       cache->cache_name, cfg.small_size_ratio, cfg.ghost_size_ratio,
+       cfg.move_to_main_threshold, cfg.ghost_to_main_threshold,
+       cfg.small_skip_ratio);
+
+  params->move_to_main_threshold = cfg.move_to_main_threshold;
+  params->ghost_to_main_threshold = cfg.ghost_to_main_threshold;
+  params->small_skip_ratio = cfg.small_skip_ratio;
+  params->small_size_ratio = cfg.small_size_ratio;
+  params->ghost_size_ratio = cfg.ghost_size_ratio;
+
+  int64_t small_size = (int64_t)(cache->cache_size * cfg.small_size_ratio);
+  int64_t main_size = cache->cache_size - small_size;
+  int64_t ghost_size = (int64_t)(cache->cache_size * cfg.ghost_size_ratio);
+
+  if (small_size > 0 && main_size > 0) {
+    params->small_fifo->cache_size = small_size;
+    params->main_fifo->cache_size = main_size;
+  }
+  if (params->ghost_fifo != NULL && ghost_size > 0) {
+    params->ghost_fifo->cache_size = ghost_size;
+  }
+}
+#endif
+
 // ***********************************************************************
 // ****                                                               ****
 // ****                parameter set up functions                     ****
 // ****                                                               ****
 // ***********************************************************************
 static const char *S4FIFO_current_params(S4FIFO_params_t *params) {
-  static __thread char params_str[128];
-  snprintf(params_str, 128,
+  static __thread char params_str[256];
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+  snprintf(params_str, sizeof(params_str),
+           "small-size-ratio=%.4lf,ghost-size-ratio=%.4lf,move-to-main-"
+           "threshold=%d,ghost-to-main-threshold=%d,small-skip-ratio=%.4lf,"
+           "auto-tune=%d,feature-collect-reqs=%lld,prediction-interval=%lld\n",
+           params->small_size_ratio, params->ghost_size_ratio,
+           params->move_to_main_threshold, params->ghost_to_main_threshold,
+           params->small_skip_ratio, params->auto_tune,
+           (long long)params->feature_collect_reqs,
+           (long long)params->prediction_interval);
+#else
+  snprintf(params_str, sizeof(params_str),
            "small-size-ratio=%.4lf,ghost-size-ratio=%.4lf,move-to-main-"
            "threshold=%d,ghost-to-main-threshold=%d,small-skip-ratio=%.4lf\n",
            params->small_size_ratio, params->ghost_size_ratio,
            params->move_to_main_threshold, params->ghost_to_main_threshold,
            params->small_skip_ratio);
+#endif
   return params_str;
 }
 
@@ -524,6 +810,14 @@ static void S4FIFO_parse_params(cache_t *cache,
       params->ghost_to_main_threshold = atoi(value);
     } else if (strcasecmp(key, "small-skip-ratio") == 0) {
       params->small_skip_ratio = strtod(value, NULL);
+#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+    } else if (strcasecmp(key, "auto-tune") == 0) {
+      params->auto_tune = (atoi(value) != 0);
+    } else if (strcasecmp(key, "feature-collect-reqs") == 0) {
+      params->feature_collect_reqs = strtoll(value, NULL, 10);
+    } else if (strcasecmp(key, "prediction-interval") == 0) {
+      params->prediction_interval = strtoll(value, NULL, 10);
+#endif
     } else if (strcasecmp(key, "print") == 0) {
       printf("parameters: %s\n", S4FIFO_current_params(params));
       exit(0);

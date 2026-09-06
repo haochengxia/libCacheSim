@@ -93,9 +93,18 @@ endif()
 
 # 3L Cache
 if (ENABLE_3L_CACHE)
-    set (eviction_sources_cpp ${eviction_sources_cpp} 
+    set (eviction_sources_cpp ${eviction_sources_cpp}
         eviction/3LCache/ThreeLCache_Interface.cpp
         eviction/3LCache/ThreeLCache.cpp
+        )
+endif()
+
+# S4FIFO's learned control plane (auto-tune=1): a self-contained, plain-C
+# model (no ML runtime dependency), so it's added to eviction_sources_c,
+# not eviction_sources_cpp.
+if (ENABLE_S4FIFO_LEARNED)
+    set(eviction_sources_c ${eviction_sources_c}
+        eviction/S4FIFO_predictor.c
         )
 endif()
 

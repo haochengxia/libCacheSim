@@ -140,8 +140,11 @@ typedef struct {
 } S3FIFO_obj_metadata_t;
 
 typedef struct {
-  int64_t insert_seq;  // small FIFO insert sequence number, at insertion time
+  int64_t insert_seq;  // insert sequence number (of whichever sub-FIFO the
+                       // object currently lives in), at insertion time
   int32_t freq;
+  int32_t insert_bucket;  // ghost FIFO only: histogram bucket at insertion,
+                          // used by the optional learned control plane
 } S4FIFO_obj_metadata_t;
 
 typedef struct {
