@@ -104,6 +104,11 @@ typedef struct {
   // to use instead of the compiled-in lite one. Empty means "use the lite
   // model" - this is the default and requires no setup.
   char model_path[256];
+  // optional: log the real model's 73-feature input vector (see
+  // S4FIFO_predictor.h) at the same point a prediction would be made from
+  // it. For gathering (feature, best-of-18-config) training data - not
+  // needed for normal use.
+  bool dump_features;
 #endif
 } S4FIFO_params_t;
 
@@ -747,6 +752,17 @@ static void S4FIFO_apply_predicted_config(cache_t *cache,
   S4FIFO_feature_vector_t fv;
   S4FIFO_feature_collector_get_features(params->feature_collector, &fv);
 
+  if (params->dump_features) {
+    double features73[73];
+    if (s4fifo_dump_features73(&fv, features73)) {
+      fprintf(stderr, "S4FIFO_FEATURES73=[");
+      for (int i = 0; i < 73; i++) {
+        fprintf(stderr, "%s%.17g", (i == 0) ? "" : ",", features73[i]);
+      }
+      fprintf(stderr, "]\n");
+    }
+  }
+
   S4FIFOConfigEntry cfg;
   if (!s4fifo_predict_auto(&fv, params->model_path, &cfg)) {
     INFO(
@@ -853,6 +869,8 @@ static void S4FIFO_parse_params(cache_t *cache,
     } else if (strcasecmp(key, "model-path") == 0) {
       strncpy(params->model_path, value, sizeof(params->model_path) - 1);
       params->model_path[sizeof(params->model_path) - 1] = '\0';
+    } else if (strcasecmp(key, "dump-features") == 0) {
+      params->dump_features = (atoi(value) != 0);
 #endif
     } else if (strcasecmp(key, "print") == 0) {
       printf("parameters: %s\n", S4FIFO_current_params(params));

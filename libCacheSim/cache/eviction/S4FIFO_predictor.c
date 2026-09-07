@@ -156,6 +156,14 @@ const S4FIFOConfigEntry *s4fifo_get_config_table(void) {
   return kS4FIFOConfigs;
 }
 
+bool s4fifo_dump_features73(const S4FIFO_feature_vector_t *fv, double *out73) {
+  if (!s4fifo_has_enough_data(fv)) {
+    return false;
+  }
+  s4fifo_prepare_model_input73(fv, out73);
+  return true;
+}
+
 bool s4fifo_predict_auto(const S4FIFO_feature_vector_t *fv,
                          const char *model_path, S4FIFOConfigEntry *out) {
   if (!s4fifo_has_enough_data(fv)) {

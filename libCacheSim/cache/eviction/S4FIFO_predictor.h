@@ -76,6 +76,20 @@ bool s4fifo_predict_auto(const S4FIFO_feature_vector_t *fv,
  */
 const S4FIFOConfigEntry *s4fifo_get_config_table(void);
 
+/**
+ * @brief expose the real model's exact 73-feature input, for gathering
+ * (feature, best-of-18-config) training data at the same point in a
+ * trace's lifecycle a real deployment would predict from - reuses the
+ * same guard and feature derivation as s4fifo_predict_auto(), so training
+ * and inference can never see differently-computed features.
+ *
+ * @param out73 populated iff this returns true
+ * @return true if there's enough data collected in `fv` for `out73` to be
+ * meaningful
+ */
+bool s4fifo_dump_features73(const S4FIFO_feature_vector_t *fv,
+                            double *out73 /* [73] */);
+
 #ifdef __cplusplus
 }
 #endif
