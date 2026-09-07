@@ -129,9 +129,15 @@ static void s4fifo_prepare_model_input73(const S4FIFO_feature_vector_t *fv,
   }
 }
 
+// Guards both backends: not enough data collected yet for a meaningful
+// prediction (see S4FIFO_predictor.h).
+static bool s4fifo_has_enough_data(const S4FIFO_feature_vector_t *fv) {
+  return fv->total_requests >= S4FIFO_PREDICT_MIN_REQUESTS &&
+         fv->total_hits >= S4FIFO_PREDICT_MIN_HITS;
+}
+
 bool s4fifo_predict(const S4FIFO_feature_vector_t *fv, S4FIFOConfigEntry *out) {
-  if (fv->total_requests < S4FIFO_PREDICT_MIN_REQUESTS ||
-      fv->total_hits < S4FIFO_PREDICT_MIN_HITS) {
+  if (!s4fifo_has_enough_data(fv)) {
     return false;
   }
 
@@ -151,8 +157,7 @@ const S4FIFOConfigEntry *s4fifo_get_config_table(void) { return kS4FIFOConfigs; 
 
 bool s4fifo_predict_auto(const S4FIFO_feature_vector_t *fv,
                          const char *model_path, S4FIFOConfigEntry *out) {
-  if (fv->total_requests < S4FIFO_PREDICT_MIN_REQUESTS ||
-      fv->total_hits < S4FIFO_PREDICT_MIN_HITS) {
+  if (!s4fifo_has_enough_data(fv)) {
     return false;
   }
 
