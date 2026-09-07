@@ -39,7 +39,15 @@
 #include "dataStructure/hashtable/hashtable.h"
 #include "libCacheSim/evictionAlgo.h"
 
+// Whether the optional learned control plane ("auto-tune=1", see the
+// section near the bottom of this file) is compiled in.
 #if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+#define S4FIFO_LEARNED 1
+#else
+#define S4FIFO_LEARNED 0
+#endif
+
+#if S4FIFO_LEARNED
 #include "S4FIFO_features.h"
 #include "S4FIFO_predictor.h"
 #endif
@@ -48,7 +56,7 @@
 extern "C" {
 #endif
 
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+#if S4FIFO_LEARNED
 // See the "learned control plane" section near the bottom of this file for
 // how these phases are used.
 typedef enum {
@@ -74,7 +82,7 @@ typedef struct {
   request_t *req_local;
   int64_t small_insert_seq;      // counts inserts into the small FIFO
 
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+#if S4FIFO_LEARNED
   // Optional learned control plane ("auto-tune=1"): collects features for
   // `feature_collect_reqs` requests, predicts a configuration once, applies
   // it, and (if `prediction_interval` > 0) repeats every `prediction_interval`
@@ -99,7 +107,7 @@ typedef struct {
 #endif
 } S4FIFO_params_t;
 
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+#if S4FIFO_LEARNED
 static const char *DEFAULT_CACHE_PARAMS =
     "small-size-ratio=0.10,ghost-size-ratio=0.90,move-to-main-threshold=2,"
     "ghost-to-main-threshold=0,small-skip-ratio=0.00,auto-tune=0,"
@@ -133,10 +141,11 @@ static void S4FIFO_parse_params(cache_t *cache,
 static void S4FIFO_evict_small(cache_t *cache, const request_t *req);
 static void S4FIFO_evict_main(cache_t *cache, const request_t *req);
 
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+#if S4FIFO_LEARNED
 static void S4FIFO_update_phase(cache_t *cache, S4FIFO_params_t *params);
 static void S4FIFO_apply_predicted_config(cache_t *cache,
                                           S4FIFO_params_t *params);
+static inline bool S4FIFO_is_collecting(const S4FIFO_params_t *params);
 #endif
 
 // ***********************************************************************
@@ -209,7 +218,7 @@ cache_t *S4FIFO_init(const common_cache_params_t ccache_params,
            params->small_size_ratio, params->move_to_main_threshold,
            params->ghost_to_main_threshold, params->small_skip_ratio);
 
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+#if S4FIFO_LEARNED
   params->phase = S4FIFO_PHASE_WARMUP;
   params->phase_start_n_req = 0;
   if (params->auto_tune) {
@@ -240,7 +249,7 @@ static void S4FIFO_free(cache_t *cache) {
     params->ghost_fifo->cache_free(params->ghost_fifo);
   }
   params->main_fifo->cache_free(params->main_fifo);
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+#if S4FIFO_LEARNED
   if (params->feature_collector != NULL) {
     free(params->feature_collector);
   }
@@ -274,10 +283,10 @@ static bool S4FIFO_get(cache_t *cache, const request_t *req) {
                    params->main_fifo->get_occupied_byte(params->main_fifo) <=
                cache->cache_size);
 
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+#if S4FIFO_LEARNED
   if (params->feature_collector != NULL) {
     S4FIFO_update_phase(cache, params);
-    if (params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
+    if (S4FIFO_is_collecting(params)) {
       S4FIFO_feature_collector_record_request(params->feature_collector);
     }
   }
@@ -305,6 +314,67 @@ static inline int64_t S4FIFO_small_fifo_age(const S4FIFO_params_t *params,
                                             const cache_obj_t *obj) {
   return params->small_insert_seq - obj->S4FIFO.insert_seq;
 }
+
+#if S4FIFO_LEARNED
+// ---- learned control plane: feature-tracking helpers -----------------
+// These are all no-ops unless auto-tune is enabled and currently in the
+// FEATURE_COLLECT phase; centralizing that check here (rather than
+// repeating it at every call site) is what keeps S4FIFO_find/_insert/
+// _evict_small readable.
+
+static inline bool S4FIFO_is_collecting(const S4FIFO_params_t *params) {
+  return params->feature_collector != NULL &&
+         params->phase == S4FIFO_PHASE_FEATURE_COLLECT;
+}
+
+// Records `obj`'s insertion into the small FIFO and stamps its insert_seq
+// (used regardless of auto-tune by S4FIFO_small_fifo_age, so this only
+// skips the feature-collector call, not the stamp, when not collecting).
+static inline void S4FIFO_track_small_insert(S4FIFO_params_t *params,
+                                             cache_obj_t *obj) {
+  obj->S4FIFO.insert_seq = params->small_insert_seq;
+  if (S4FIFO_is_collecting(params)) {
+    S4FIFO_feature_collector_record_insert_small(params->feature_collector,
+                                                 params->small_insert_seq);
+    if (!params->seen_in_ghost_not_promoted) {
+      S4FIFO_feature_collector_record_unique(params->feature_collector);
+    }
+  }
+  params->small_insert_seq++;
+}
+
+// Same, for an object landing in the main FIFO (ghost promotion,
+// cold-start bypass, or small-queue promotion - all three call this).
+static inline void S4FIFO_track_main_insert(S4FIFO_params_t *params,
+                                            cache_obj_t *obj) {
+  if (obj == NULL) return;
+  obj->S4FIFO.insert_seq = params->main_insert_seq;
+  if (S4FIFO_is_collecting(params)) {
+    S4FIFO_feature_collector_record_insert_main(params->feature_collector,
+                                                params->main_insert_seq);
+  }
+  params->main_insert_seq++;
+}
+
+// Records a small-FIFO object falling out into the ghost FIFO: the ghost
+// insert itself (`ghost_fifo->get`) always happens; the insert_seq/bucket
+// stamp and one-hit-wonder count are feature-collection bookkeeping only.
+static inline void S4FIFO_track_ghost_insert(S4FIFO_params_t *params,
+                                             cache_t *ghost_fifo,
+                                             request_t *req_local) {
+  ghost_fifo->get(ghost_fifo, req_local);
+  if (!S4FIFO_is_collecting(params)) return;
+
+  cache_obj_t *ghost_obj = ghost_fifo->find(ghost_fifo, req_local, false);
+  if (ghost_obj != NULL) {
+    ghost_obj->S4FIFO.insert_seq = params->ghost_insert_seq;
+    ghost_obj->S4FIFO.insert_bucket = S4FIFO_feature_collector_record_insert_ghost(
+        params->feature_collector, params->ghost_insert_seq);
+    params->ghost_insert_seq++;
+  }
+  S4FIFO_feature_collector_record_one_hit(params->feature_collector);
+}
+#endif
 
 /**
  * @brief find an object in the cache
@@ -335,7 +405,7 @@ static cache_obj_t *S4FIFO_find(cache_t *cache, const request_t *req,
 
   /* update cache is true from now */
   params->hit_on_ghost = false;
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+#if S4FIFO_LEARNED
   params->seen_in_ghost_not_promoted = false;
 #endif
   cache_obj_t *obj = params->small_fifo->find(params->small_fifo, req, true);
@@ -351,9 +421,8 @@ static cache_obj_t *S4FIFO_find(cache_t *cache, const request_t *req,
     if (S4FIFO_small_fifo_age(params, obj) >= probation_len) {
       obj->S4FIFO.freq += 1;
     }
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
-    if (params->feature_collector != NULL &&
-        params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
+#if S4FIFO_LEARNED
+    if (S4FIFO_is_collecting(params)) {
       S4FIFO_feature_collector_record_hit_small(
           params->feature_collector, obj->S4FIFO.insert_seq,
           params->small_insert_seq);
@@ -367,9 +436,8 @@ static cache_obj_t *S4FIFO_find(cache_t *cache, const request_t *req,
     ghost_obj = params->ghost_fifo->find(params->ghost_fifo, req, false);
   }
   if (ghost_obj != NULL) {
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
-    if (params->feature_collector != NULL &&
-        params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
+#if S4FIFO_LEARNED
+    if (S4FIFO_is_collecting(params)) {
       S4FIFO_feature_collector_record_hit_ghost(
           params->feature_collector, ghost_obj->S4FIFO.insert_seq,
           ghost_obj->S4FIFO.insert_bucket, params->ghost_insert_seq);
@@ -380,7 +448,7 @@ static cache_obj_t *S4FIFO_find(cache_t *cache, const request_t *req,
       params->ghost_fifo->remove(params->ghost_fifo, req->obj_id);
       params->hit_on_ghost = true;
     } else {
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+#if S4FIFO_LEARNED
       params->seen_in_ghost_not_promoted = true;
 #endif
     }
@@ -392,9 +460,8 @@ static cache_obj_t *S4FIFO_find(cache_t *cache, const request_t *req,
   obj = params->main_fifo->find(params->main_fifo, req, true);
   if (obj != NULL) {
     obj->S4FIFO.freq += 1;
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
-    if (params->feature_collector != NULL &&
-        params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
+#if S4FIFO_LEARNED
+    if (S4FIFO_is_collecting(params)) {
       S4FIFO_feature_collector_record_hit_main(
           params->feature_collector, obj->S4FIFO.insert_seq,
           params->main_insert_seq);
@@ -427,16 +494,8 @@ static cache_obj_t *S4FIFO_insert(cache_t *cache, const request_t *req) {
     /* insert into main FIFO */
     params->hit_on_ghost = false;
     obj = main_fifo->insert(main_fifo, req);
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
-    if (obj != NULL) {
-      obj->S4FIFO.insert_seq = params->main_insert_seq;
-      if (params->feature_collector != NULL &&
-          params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
-        S4FIFO_feature_collector_record_insert_main(params->feature_collector,
-                                                    params->main_insert_seq);
-      }
-      params->main_insert_seq++;
-    }
+#if S4FIFO_LEARNED
+    S4FIFO_track_main_insert(params, obj);
 #endif
   } else {
     /* insert into small fifo */
@@ -451,31 +510,16 @@ static cache_obj_t *S4FIFO_insert(cache_t *cache, const request_t *req) {
     if (!params->has_evicted &&
         small_fifo->get_occupied_byte(small_fifo) >= small_fifo->cache_size) {
       obj = main_fifo->insert(main_fifo, req);
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
-      if (obj != NULL) {
-        obj->S4FIFO.insert_seq = params->main_insert_seq;
-        if (params->feature_collector != NULL &&
-            params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
-          S4FIFO_feature_collector_record_insert_main(
-              params->feature_collector, params->main_insert_seq);
-        }
-        params->main_insert_seq++;
-      }
+#if S4FIFO_LEARNED
+      S4FIFO_track_main_insert(params, obj);
 #endif
     } else {
       obj = small_fifo->insert(small_fifo, req);
-      obj->S4FIFO.insert_seq = params->small_insert_seq;
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
-      if (params->feature_collector != NULL &&
-          params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
-        S4FIFO_feature_collector_record_insert_small(params->feature_collector,
-                                                     params->small_insert_seq);
-        if (!params->seen_in_ghost_not_promoted) {
-          S4FIFO_feature_collector_record_unique(params->feature_collector);
-        }
-      }
+#if S4FIFO_LEARNED
+      S4FIFO_track_small_insert(params, obj);
+#else
+      obj->S4FIFO.insert_seq = params->small_insert_seq++;
 #endif
-      params->small_insert_seq++;
     }
   }
 
@@ -514,38 +558,19 @@ static void S4FIFO_evict_small(cache_t *cache, const request_t *req) {
 
     if (obj_to_evict->S4FIFO.freq >= params->move_to_main_threshold) {
       cache_obj_t *main_obj = main_fifo->insert(main_fifo, params->req_local);
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
-      if (main_obj != NULL) {
-        main_obj->S4FIFO.insert_seq = params->main_insert_seq;
-        if (params->feature_collector != NULL &&
-            params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
-          S4FIFO_feature_collector_record_insert_main(params->feature_collector,
-                                                      params->main_insert_seq);
-        }
-        params->main_insert_seq++;
-      }
+#if S4FIFO_LEARNED
+      S4FIFO_track_main_insert(params, main_obj);
 #endif
     } else {
       if (ghost_fifo != NULL) {
+#if S4FIFO_LEARNED
+        S4FIFO_track_ghost_insert(params, ghost_fifo, params->req_local);
+#else
         ghost_fifo->get(ghost_fifo, params->req_local);
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
-        if (params->feature_collector != NULL &&
-            params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
-          cache_obj_t *ghost_obj =
-              ghost_fifo->find(ghost_fifo, params->req_local, false);
-          if (ghost_obj != NULL) {
-            ghost_obj->S4FIFO.insert_seq = params->ghost_insert_seq;
-            ghost_obj->S4FIFO.insert_bucket =
-                S4FIFO_feature_collector_record_insert_ghost(
-                    params->feature_collector, params->ghost_insert_seq);
-            params->ghost_insert_seq++;
-          }
-        }
 #endif
       }
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
-      if (params->feature_collector != NULL &&
-          params->phase == S4FIFO_PHASE_FEATURE_COLLECT) {
+#if S4FIFO_LEARNED
+      if (S4FIFO_is_collecting(params)) {
         S4FIFO_feature_collector_record_one_hit(params->feature_collector);
       }
 #endif
@@ -653,7 +678,7 @@ static inline bool S4FIFO_can_insert(cache_t *cache, const request_t *req) {
          cache_can_insert_default(cache, req);
 }
 
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+#if S4FIFO_LEARNED
 // ***********************************************************************
 // ****                                                               ****
 // ****      learned control plane ("auto-tune=1"), optional          ****
@@ -764,7 +789,7 @@ static void S4FIFO_apply_predicted_config(cache_t *cache,
 // ***********************************************************************
 static const char *S4FIFO_current_params(S4FIFO_params_t *params) {
   static __thread char params_str[512];
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+#if S4FIFO_LEARNED
   snprintf(params_str, sizeof(params_str),
            "small-size-ratio=%.4lf,ghost-size-ratio=%.4lf,move-to-main-"
            "threshold=%d,ghost-to-main-threshold=%d,small-skip-ratio=%.4lf,"
@@ -815,7 +840,7 @@ static void S4FIFO_parse_params(cache_t *cache,
       params->ghost_to_main_threshold = atoi(value);
     } else if (strcasecmp(key, "small-skip-ratio") == 0) {
       params->small_skip_ratio = strtod(value, NULL);
-#if defined(ENABLE_S4FIFO_LEARNED) && ENABLE_S4FIFO_LEARNED == 1
+#if S4FIFO_LEARNED
     } else if (strcasecmp(key, "auto-tune") == 0) {
       params->auto_tune = (atoi(value) != 0);
     } else if (strcasecmp(key, "feature-collect-reqs") == 0) {
