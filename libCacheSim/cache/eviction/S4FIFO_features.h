@@ -190,11 +190,11 @@ static inline void S4FIFO_feature_collector_init(
   if (fc->num_buckets > S4FIFO_FEATURE_MAX_BUCKETS)
     fc->num_buckets = S4FIFO_FEATURE_MAX_BUCKETS;
   S4FIFO_hit_pos_tracker_init(&fc->small_tracker, small_size, fc->num_buckets,
-                             false);
+                              false);
   S4FIFO_hit_pos_tracker_init(&fc->main_tracker, main_size, fc->num_buckets,
-                             false);
+                              false);
   S4FIFO_hit_pos_tracker_init(&fc->ghost_tracker, ghost_size, fc->num_buckets,
-                             true);
+                              true);
 }
 
 // Each record_insert_*/record_hit_* pair below takes the CURRENT value of
@@ -206,7 +206,7 @@ static inline void S4FIFO_feature_collector_init(
 static inline void S4FIFO_feature_collector_record_insert_small(
     S4FIFO_feature_collector_t *fc, int64_t small_insert_counter) {
   S4FIFO_hit_pos_tracker_record_insert(&fc->small_tracker,
-                                      small_insert_counter);
+                                       small_insert_counter);
 }
 
 static inline void S4FIFO_feature_collector_record_insert_main(
@@ -230,7 +230,7 @@ static inline void S4FIFO_feature_collector_record_hit_small(
     int64_t small_insert_counter) {
   fc->hits_small++;
   S4FIFO_hit_pos_tracker_record_hit(&fc->small_tracker, insert_time, 0,
-                                   small_insert_counter);
+                                    small_insert_counter);
 }
 
 static inline void S4FIFO_feature_collector_record_hit_main(
@@ -238,15 +238,15 @@ static inline void S4FIFO_feature_collector_record_hit_main(
     int64_t main_insert_counter) {
   fc->hits_main++;
   S4FIFO_hit_pos_tracker_record_hit(&fc->main_tracker, insert_time, 0,
-                                   main_insert_counter);
+                                    main_insert_counter);
 }
 
 static inline void S4FIFO_feature_collector_record_hit_ghost(
-    S4FIFO_feature_collector_t *fc, int64_t insert_time,
-    int32_t insert_bucket, int64_t ghost_insert_counter) {
+    S4FIFO_feature_collector_t *fc, int64_t insert_time, int32_t insert_bucket,
+    int64_t ghost_insert_counter) {
   fc->hits_ghost++;
   S4FIFO_hit_pos_tracker_record_hit(&fc->ghost_tracker, insert_time,
-                                   insert_bucket, ghost_insert_counter);
+                                    insert_bucket, ghost_insert_counter);
 }
 
 static inline void S4FIFO_feature_collector_record_request(
@@ -286,10 +286,9 @@ static inline void S4FIFO_feature_collector_get_features(
     fv->hit_ratio_ghost = 0.0;
   }
 
-  fv->unique_ratio =
-      fc->total_requests > 0
-          ? (double)fc->total_unique / (double)fc->total_requests
-          : 0.0;
+  fv->unique_ratio = fc->total_requests > 0
+                         ? (double)fc->total_unique / (double)fc->total_requests
+                         : 0.0;
   fv->one_hit_ratio = fc->total_unique > 0
                           ? (double)fc->one_hit_count / (double)fc->total_unique
                           : 0.0;

@@ -5,16 +5,18 @@
 // this file's header comment, not committed here since the model itself
 // isn't committed either - see S4FIFO_model/README.md):
 //
+// clang-format off
 //   magic            char[4]  = "S4M1"
 //   n_models         uint32
 //   n_classes        uint32
 //   n_features       uint32
 //   n_trees_total    uint32
-//   n_estimators[n_models]                          uint32 each
-//   tree_table[n_trees_total]: {node_offset, n_internal, leaf_offset}     uint32 x3 each
-//   nodes[sum n_internal]: {feature_idx, left, right, _pad, threshold}   int16 x4 + double
-//   leaves[sum (n_internal+1)]                                          double each
+//   n_estimators[n_models]                                      uint32 each
+//   tree_table[n_trees_total]: {node_offset, n_internal, leaf_offset}   uint32 x3 each
+//   nodes[sum n_internal]: {feature_idx, left, right, _pad, threshold}  int16 x4 + double
+//   leaves[sum (n_internal+1)]                                         double each
 //   cost_matrix[n_classes*n_classes], row-major                        double each
+// clang-format on
 //
 // A tree's nodes/leaves live at nodes[node_offset .. node_offset+n_internal)
 // and leaves[leaf_offset .. leaf_offset+n_internal+1). Within a tree, child
@@ -58,15 +60,17 @@ typedef struct {
 
 // The on-disk layout (scripts/s4fifo_export_model.py) assumes these exact,
 // unpadded sizes so a whole array can be fread() directly.
-_Static_assert(sizeof(s4fifo_real_node_t) == 16, "s4fifo_real_node_t must be 16 bytes");
-_Static_assert(sizeof(s4fifo_real_tree_t) == 12, "s4fifo_real_tree_t must be 12 bytes");
+_Static_assert(sizeof(s4fifo_real_node_t) == 16,
+               "s4fifo_real_node_t must be 16 bytes");
+_Static_assert(sizeof(s4fifo_real_tree_t) == 12,
+               "s4fifo_real_tree_t must be 12 bytes");
 
 typedef struct {
   uint32_t n_models;
   uint32_t n_classes;
   uint32_t n_features;
   uint32_t n_trees_total;
-  uint32_t *n_estimators;   // [n_models]
+  uint32_t *n_estimators;     // [n_models]
   s4fifo_real_tree_t *trees;  // [n_trees_total]
   s4fifo_real_node_t *nodes;  // [total internal nodes]
   double *leaves;             // [total leaves]
@@ -75,7 +79,8 @@ typedef struct {
 
 static pthread_mutex_t g_load_mutex = PTHREAD_MUTEX_INITIALIZER;
 static s4fifo_real_model_t *g_model = NULL;  // NULL until a load succeeds
-static bool g_load_attempted = false;        // true after the first attempt, success or not
+static bool g_load_attempted =
+    false;  // true after the first attempt, success or not
 
 static bool read_exact(FILE *fp, void *buf, size_t n) {
   return fread(buf, 1, n, fp) == n;
@@ -103,11 +108,13 @@ static s4fifo_real_model_t *load_model_file(const char *path) {
   model->n_features = header[2];
   model->n_trees_total = header[3];
 
-  if (model->n_classes == 0 || model->n_classes > S4FIFO_REAL_MODEL_MAX_CLASSES ||
+  if (model->n_classes == 0 ||
+      model->n_classes > S4FIFO_REAL_MODEL_MAX_CLASSES ||
       model->n_models == 0 || model->n_trees_total == 0) {
-    WARN("S4FIFO: %s has implausible header (n_models=%u n_classes=%u "
-         "n_trees_total=%u)\n",
-         path, model->n_models, model->n_classes, model->n_trees_total);
+    WARN(
+        "S4FIFO: %s has implausible header (n_models=%u n_classes=%u "
+        "n_trees_total=%u)\n",
+        path, model->n_models, model->n_classes, model->n_trees_total);
     goto out;
   }
 
@@ -141,15 +148,16 @@ static s4fifo_real_model_t *load_model_file(const char *path) {
     goto out;
   }
 
-  model->cost_matrix = malloc(model->n_classes * model->n_classes * sizeof(double));
+  model->cost_matrix =
+      malloc(model->n_classes * model->n_classes * sizeof(double));
   if (!read_exact(fp, model->cost_matrix,
                   model->n_classes * model->n_classes * sizeof(double))) {
     WARN("S4FIFO: %s truncated (cost matrix)\n", path);
     goto out;
   }
 
-  INFO("S4FIFO: loaded real model %s (%u models, %u trees, %llu nodes)\n",
-       path, model->n_models, model->n_trees_total, (unsigned long long)n_nodes);
+  INFO("S4FIFO: loaded real model %s (%u models, %u trees, %llu nodes)\n", path,
+       model->n_models, model->n_trees_total, (unsigned long long)n_nodes);
   ok = true;
 
 out:
@@ -188,7 +196,8 @@ static double eval_tree(const s4fifo_real_model_t *model, uint32_t tree_idx,
   int32_t local = 0;
   for (;;) {
     const s4fifo_real_node_t *n = &model->nodes[t->node_offset + local];
-    int16_t child = (input[n->feature_idx] <= n->threshold) ? n->left : n->right;
+    int16_t child =
+        (input[n->feature_idx] <= n->threshold) ? n->left : n->right;
     if (child < 0) {
       uint32_t leaf_local = (uint32_t)(-child - 1);
       return model->leaves[t->leaf_offset + leaf_local];

@@ -72,15 +72,15 @@ typedef struct {
   cache_t *main_fifo;
   bool hit_on_ghost;
 
-  int move_to_main_threshold;    // small/main queue: hits needed to promote
-  int ghost_to_main_threshold;   // ghost queue: hits needed to promote
+  int move_to_main_threshold;   // small/main queue: hits needed to promote
+  int ghost_to_main_threshold;  // ghost queue: hits needed to promote
   double small_size_ratio;
   double ghost_size_ratio;
-  double small_skip_ratio;       // fraction of small FIFO treated as probation
+  double small_skip_ratio;  // fraction of small FIFO treated as probation
 
   bool has_evicted;
   request_t *req_local;
-  int64_t small_insert_seq;      // counts inserts into the small FIFO
+  int64_t small_insert_seq;  // counts inserts into the small FIFO
 
 #if S4FIFO_LEARNED
   // Optional learned control plane ("auto-tune=1"): collects features for
@@ -368,8 +368,9 @@ static inline void S4FIFO_track_ghost_insert(S4FIFO_params_t *params,
   cache_obj_t *ghost_obj = ghost_fifo->find(ghost_fifo, req_local, false);
   if (ghost_obj != NULL) {
     ghost_obj->S4FIFO.insert_seq = params->ghost_insert_seq;
-    ghost_obj->S4FIFO.insert_bucket = S4FIFO_feature_collector_record_insert_ghost(
-        params->feature_collector, params->ghost_insert_seq);
+    ghost_obj->S4FIFO.insert_bucket =
+        S4FIFO_feature_collector_record_insert_ghost(params->feature_collector,
+                                                     params->ghost_insert_seq);
     params->ghost_insert_seq++;
   }
   S4FIFO_feature_collector_record_one_hit(params->feature_collector);
@@ -415,17 +416,17 @@ static cache_obj_t *S4FIFO_find(cache_t *cache, const request_t *req,
     // re-requesting them does not count as a hit; this filters out
     // immediate re-requests (e.g. from scans) that are not indicative of
     // real reuse
-    int64_t probation_len = (int64_t)(params->small_skip_ratio *
-                                      params->small_fifo->get_n_obj(
-                                          params->small_fifo));
+    int64_t probation_len =
+        (int64_t)(params->small_skip_ratio *
+                  params->small_fifo->get_n_obj(params->small_fifo));
     if (S4FIFO_small_fifo_age(params, obj) >= probation_len) {
       obj->S4FIFO.freq += 1;
     }
 #if S4FIFO_LEARNED
     if (S4FIFO_is_collecting(params)) {
-      S4FIFO_feature_collector_record_hit_small(
-          params->feature_collector, obj->S4FIFO.insert_seq,
-          params->small_insert_seq);
+      S4FIFO_feature_collector_record_hit_small(params->feature_collector,
+                                                obj->S4FIFO.insert_seq,
+                                                params->small_insert_seq);
     }
 #endif
     return obj;
@@ -462,9 +463,9 @@ static cache_obj_t *S4FIFO_find(cache_t *cache, const request_t *req,
     obj->S4FIFO.freq += 1;
 #if S4FIFO_LEARNED
     if (S4FIFO_is_collecting(params)) {
-      S4FIFO_feature_collector_record_hit_main(
-          params->feature_collector, obj->S4FIFO.insert_seq,
-          params->main_insert_seq);
+      S4FIFO_feature_collector_record_hit_main(params->feature_collector,
+                                               obj->S4FIFO.insert_seq,
+                                               params->main_insert_seq);
     }
 #endif
   }
@@ -748,19 +749,21 @@ static void S4FIFO_apply_predicted_config(cache_t *cache,
 
   S4FIFOConfigEntry cfg;
   if (!s4fifo_predict_auto(&fv, params->model_path, &cfg)) {
-    INFO("%s: not enough data collected (requests=%lld, hits=%lld), "
-         "keeping current configuration\n",
-         cache->cache_name, (long long)fv.total_requests,
-         (long long)fv.total_hits);
+    INFO(
+        "%s: not enough data collected (requests=%lld, hits=%lld), "
+        "keeping current configuration\n",
+        cache->cache_name, (long long)fv.total_requests,
+        (long long)fv.total_hits);
     return;
   }
 
-  INFO("%s: applying learned configuration small-size-ratio=%.4lf,"
-       "ghost-size-ratio=%.4lf,move-to-main-threshold=%d,"
-       "ghost-to-main-threshold=%d,small-skip-ratio=%.4lf\n",
-       cache->cache_name, cfg.small_size_ratio, cfg.ghost_size_ratio,
-       cfg.move_to_main_threshold, cfg.ghost_to_main_threshold,
-       cfg.small_skip_ratio);
+  INFO(
+      "%s: applying learned configuration small-size-ratio=%.4lf,"
+      "ghost-size-ratio=%.4lf,move-to-main-threshold=%d,"
+      "ghost-to-main-threshold=%d,small-skip-ratio=%.4lf\n",
+      cache->cache_name, cfg.small_size_ratio, cfg.ghost_size_ratio,
+      cfg.move_to_main_threshold, cfg.ghost_to_main_threshold,
+      cfg.small_skip_ratio);
 
   params->move_to_main_threshold = cfg.move_to_main_threshold;
   params->ghost_to_main_threshold = cfg.ghost_to_main_threshold;

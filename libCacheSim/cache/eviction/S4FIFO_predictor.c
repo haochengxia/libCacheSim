@@ -58,9 +58,8 @@ static const S4FIFOConfigEntry kS4FIFOConfigs[S4FIFO_MODEL_N_CONFIGS] = {
 // was trained on features sorted ALPHABETICALLY by name, so bin order in
 // the model's input is the lexicographic order of "0".."19", not numeric
 // order: 0, 1, 10, 11, ..., 19, 2, 3, ..., 9.
-static const int kHistOrder[20] = {0, 1, 10, 11, 12, 13, 14, 15,
-                                   16, 17, 18, 19, 2,  3,  4,  5,
-                                   6,  7,  8,  9};
+static const int kHistOrder[20] = {0,  1,  10, 11, 12, 13, 14, 15, 16, 17,
+                                   18, 19, 2,  3,  4,  5,  6,  7,  8,  9};
 
 // Feature order (alphabetical, matching training):
 // 0: H_g, 1: H_m, 2: H_s, 3: decay_rate_small, 4: entropy_gap,
@@ -153,7 +152,9 @@ bool s4fifo_predict(const S4FIFO_feature_vector_t *fv, S4FIFOConfigEntry *out) {
   return true;
 }
 
-const S4FIFOConfigEntry *s4fifo_get_config_table(void) { return kS4FIFOConfigs; }
+const S4FIFOConfigEntry *s4fifo_get_config_table(void) {
+  return kS4FIFOConfigs;
+}
 
 bool s4fifo_predict_auto(const S4FIFO_feature_vector_t *fv,
                          const char *model_path, S4FIFOConfigEntry *out) {
@@ -168,11 +169,15 @@ bool s4fifo_predict_auto(const S4FIFO_feature_vector_t *fv,
       if (s4fifo_real_model_predict(input73, out)) {
         return true;
       }
-      WARN("S4FIFO: real model at %s produced no prediction, "
-           "falling back to the lite model\n", model_path);
+      WARN(
+          "S4FIFO: real model at %s produced no prediction, "
+          "falling back to the lite model\n",
+          model_path);
     } else {
-      WARN_ONCE("S4FIFO: failed to load real model at %s, "
-                "falling back to the lite model\n", model_path);
+      WARN_ONCE(
+          "S4FIFO: failed to load real model at %s, "
+          "falling back to the lite model\n",
+          model_path);
     }
   }
 
