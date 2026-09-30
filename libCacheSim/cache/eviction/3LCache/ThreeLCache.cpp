@@ -181,7 +181,7 @@ void ThreeLCacheCache::admit(const SimpleRequest &req) {
 
   if (booster) {
     new_obj_size += req.size;
-    new_obj_keys.emplace_back(req.id);
+    new_obj_keys.push_back({req.id, req.size});
   }
 }
 
@@ -285,14 +285,16 @@ vector<int32_t> ThreeLCacheCache::quick_demotion() {
   int i = 0, j = 0;
   while (new_obj_size > (uint64_t)(_currentSize * reserved_space / 100) &&
          j < (int)(sample_rate * 1.5) && (size_t)i < new_obj_keys.size()) {
-    auto it = key_map.find(new_obj_keys[i])->second;
-    if (it.list_idx == 0) {
-      new_obj_size -= in_cache.metas[it.list_pos]._size;
-      sampled_objects.emplace_back(it.list_pos);
+    /* Retiring an entry always returns the bytes that entry contributed, so
+     * new_obj_size stays the sum of what is still queued no matter where the
+     * object is now — in the cache, in the out_cache ghost list, or gone. Only
+     * an object still in the cache can be demoted, so only that case needs the
+     * key_map lookup. */
+    new_obj_size -= new_obj_keys[i].size;
+    auto key_it = key_map.find(new_obj_keys[i].key);
+    if (key_it != key_map.end() && key_it->second.list_idx == 0) {
+      sampled_objects.emplace_back(key_it->second.list_pos);
       j++;
-    } else {
-      new_obj_size -=
-          out_cache.metas[it.list_pos - out_cache.front_index]._size;
     }
     i++;
   }

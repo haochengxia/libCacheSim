@@ -264,9 +264,20 @@ class ThreeLCacheCache : public webcachesim::Cache {
   vector<HeapUint> pred_times;
   // the step length and interval of the eviction candidate object sampling
   uint64_t scan_length = 0;
-  // new object
-  vector<uint64_t> new_obj_keys;
-  // the size of the new object
+  // objects admitted but not yet considered for quick demotion. The size is
+  // carried here rather than looked up when the entry is retired, because the
+  // metadata holding it — key_map and the metas it points at — turns over on a
+  // different clock: this queue grows with admissions and is unbounded, while
+  // the out_cache ghost list grows with evictions and is capped at roughly the
+  // object count of the cache. Evictions outrun admissions whenever admitting
+  // one object displaces several, so entries here routinely outlive the
+  // key_map entry that used to describe them.
+  struct NewObj {
+    uint64_t key;
+    uint64_t size;
+  };
+  vector<NewObj> new_obj_keys;
+  // the total size of the objects queued in new_obj_keys
   uint64_t new_obj_size = 0;
   // the number of the eviction object
   int evict_nums = 0;
