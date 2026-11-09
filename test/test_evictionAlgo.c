@@ -513,6 +513,63 @@ static void test_S3FIFO_keeps_expiry_across_moves(void) {
 }
 #endif
 
+// ctx is a bit mask of the pinned ids.
+static bool pin_from_mask(void *ctx, obj_id_t id) {
+  return id < 64 && ((*(const uint64_t *)ctx >> id) & 1);
+}
+
+// evict_n(n) must take the victims that n calls to evict() take. With pins,
+// those are the oldest unpinned objects, then pinned ones once nothing else is
+// left (pinning is best-effort).
+static void check_evict_n_matches_evict(
+    cache_t *(*init)(const common_cache_params_t, const char *)) {
+  common_cache_params_t cc_params = {.cache_size = 10, .hashpower = 8};
+  request_t *req = new_request();
+  req->obj_size = 1;
+  const uint64_t pinned = (1u << 1) | (1u << 2) | (1u << 5) | (1u << 8);
+
+  for (int pin = 0; pin <= 1; pin++) {
+    cache_t *one = init(cc_params, NULL);
+    cache_t *bulk = init(cc_params, NULL);
+    g_assert_nonnull(bulk->evict_n);
+    // Object 1 is the oldest.
+    for (obj_id_t id = 1; id <= 10; id++) {
+      req->obj_id = id;
+      one->get(one, req);
+      bulk->get(bulk, req);
+    }
+    if (pin) cache_set_pin_predicate(pin_from_mask, (void *)&pinned);
+
+    // 3 victims, then 5 more. With pins only 6 objects are unpinned, so the
+    // last 2 victims are pinned ones.
+    const int64_t rounds[] = {3, 5};
+    for (int r = 0; r < 2; r++) {
+      for (int64_t i = 0; i < rounds[r]; i++) one->evict(one, req);
+      g_assert_cmpint(bulk->evict_n(bulk, req, rounds[r]), ==, rounds[r]);
+      for (obj_id_t id = 1; id <= 10; id++) {
+        req->obj_id = id;
+        g_assert_true((one->find(one, req, false) == NULL) ==
+                      (bulk->find(bulk, req, false) == NULL));
+      }
+    }
+    // Survivors: the pinned 5 and 8, or the newest 9 and 10.
+    g_assert_cmpint(bulk->n_obj, ==, 2);
+    req->obj_id = pin ? 5 : 9;
+    g_assert_nonnull(bulk->find(bulk, req, false));
+    req->obj_id = pin ? 8 : 10;
+    g_assert_nonnull(bulk->find(bulk, req, false));
+
+    cache_set_pin_predicate(NULL, NULL);
+    one->cache_free(one);
+    bulk->cache_free(bulk);
+  }
+  free_request(req);
+}
+
+static void test_LRU_evict_n(void) { check_evict_n_matches_evict(LRU_init); }
+
+static void test_FIFO_evict_n(void) { check_evict_n_matches_evict(FIFO_init); }
+
 static void test_S3FIFOv0(gconstpointer user_data) {
   test_cache_algorithm(user_data, &test_data_truth[22]);
 }
@@ -589,6 +646,7 @@ int main(int argc, char *argv[]) {
                        test_ClockPro);
   g_test_add_data_func("/libCacheSim/cacheAlgo_CR_LFU", reader, test_CR_LFU);
   g_test_add_data_func("/libCacheSim/cacheAlgo_FIFO", reader, test_FIFO);
+  g_test_add_func("/libCacheSim/cacheAlgo_FIFO_evict_n", test_FIFO_evict_n);
   g_test_add_data_func("/libCacheSim/cacheAlgo_GDSF", reader, test_GDSF);
   g_test_add_data_func("/libCacheSim/cacheAlgo_Hyperbolic", reader,
                        test_Hyperbolic);
@@ -599,6 +657,7 @@ int main(int argc, char *argv[]) {
   g_test_add_data_func("/libCacheSim/cacheAlgo_LHD", reader, test_LHD);
   g_test_add_data_func("/libCacheSim/cacheAlgo_LIRS", reader, test_LIRS);
   g_test_add_data_func("/libCacheSim/cacheAlgo_LRU", reader, test_LRU);
+  g_test_add_func("/libCacheSim/cacheAlgo_LRU_evict_n", test_LRU_evict_n);
   g_test_add_data_func("/libCacheSim/cacheAlgo_LRU_K", reader, test_LRU_K);
   g_test_add_data_func("/libCacheSim/cacheAlgo_Merlin", reader, test_Merlin);
   g_test_add_data_func("/libCacheSim/cacheAlgo_MQ", reader, test_MQ);

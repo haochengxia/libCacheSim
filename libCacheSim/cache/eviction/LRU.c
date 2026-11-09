@@ -31,6 +31,7 @@ static cache_obj_t *LRU_find(cache_t *cache, const request_t *req,
 static cache_obj_t *LRU_insert(cache_t *cache, const request_t *req);
 static cache_obj_t *LRU_to_evict(cache_t *cache, const request_t *req);
 static void LRU_evict(cache_t *cache, const request_t *req);
+static int64_t LRU_evict_n(cache_t *cache, const request_t *req, int64_t n);
 static bool LRU_remove(cache_t *cache, obj_id_t obj_id);
 static void LRU_print_cache(const cache_t *cache);
 
@@ -56,6 +57,7 @@ cache_t *LRU_init(const common_cache_params_t ccache_params,
   cache->find = LRU_find;
   cache->insert = LRU_insert;
   cache->evict = LRU_evict;
+  cache->evict_n = LRU_evict_n;
   cache->remove = LRU_remove;
   cache->to_evict = LRU_to_evict;
   cache->get_occupied_byte = cache_get_occupied_byte_default;
@@ -293,6 +295,32 @@ static void LRU_print_cache(const cache_t *cache) {
     cur = cur->queue.next;
   }
   printf("END\n");
+}
+
+/**
+ * Evict up to n objects in one walk from the tail (see cache_evict_n_func_ptr).
+ * With pins installed these are the victims n calls to evict() would pick, in
+ * the same order: between those calls only the victims leave the queue, so each
+ * call would step over the same pinned objects again. One walk steps over them
+ * once.
+ */
+static int64_t LRU_evict_n(cache_t *cache, const request_t *req, int64_t n) {
+  LRU_params_t *params = (LRU_params_t *)cache->eviction_params;
+  int64_t evicted = 0;
+  cache_obj_t *obj = params->q_tail;
+  while (evicted < n && obj != NULL) {
+    cache_obj_t *prev = obj->queue.prev;
+    if (!cache_obj_is_pinned(obj)) {
+      remove_obj_from_list(&params->q_head, &params->q_tail, obj);
+      cache_evict_base(cache, obj, true);
+      evicted++;
+    }
+    obj = prev;
+  }
+  // Only pinned objects are left: best-effort, as cache_skip_pinned is.
+  for (; evicted < n && params->q_tail != NULL; evicted++)
+    LRU_evict(cache, req);
+  return evicted;
 }
 
 #ifdef __cplusplus

@@ -31,6 +31,7 @@ static cache_obj_t *FIFO_find(cache_t *cache, const request_t *req,
 static cache_obj_t *FIFO_insert(cache_t *cache, const request_t *req);
 static cache_obj_t *FIFO_to_evict(cache_t *cache, const request_t *req);
 static void FIFO_evict(cache_t *cache, const request_t *req);
+static int64_t FIFO_evict_n(cache_t *cache, const request_t *req, int64_t n);
 static bool FIFO_remove(cache_t *cache, obj_id_t obj_id);
 
 // ***********************************************************************
@@ -56,6 +57,7 @@ cache_t *FIFO_init(const common_cache_params_t ccache_params,
   cache->find = FIFO_find;
   cache->insert = FIFO_insert;
   cache->evict = FIFO_evict;
+  cache->evict_n = FIFO_evict_n;
   cache->remove = FIFO_remove;
   cache->to_evict = FIFO_to_evict;
   cache->get_occupied_byte = cache_get_occupied_byte_default;
@@ -231,6 +233,32 @@ static void FIFO_parse_params(cache_t *cache,
     ERROR("FIFO does not support any cache specific parameters\n");
     exit(1);
   }
+}
+
+/**
+ * Evict up to n objects in one walk from the tail (see cache_evict_n_func_ptr).
+ * With pins installed these are the victims n calls to evict() would pick, in
+ * the same order: between those calls only the victims leave the queue, so each
+ * call would step over the same pinned objects again. One walk steps over them
+ * once.
+ */
+static int64_t FIFO_evict_n(cache_t *cache, const request_t *req, int64_t n) {
+  FIFO_params_t *params = (FIFO_params_t *)cache->eviction_params;
+  int64_t evicted = 0;
+  cache_obj_t *obj = params->q_tail;
+  while (evicted < n && obj != NULL) {
+    cache_obj_t *prev = obj->queue.prev;
+    if (!cache_obj_is_pinned(obj)) {
+      remove_obj_from_list(&params->q_head, &params->q_tail, obj);
+      cache_evict_base(cache, obj, true);
+      evicted++;
+    }
+    obj = prev;
+  }
+  // Only pinned objects are left: best-effort, as cache_skip_pinned is.
+  for (; evicted < n && params->q_tail != NULL; evicted++)
+    FIFO_evict(cache, req);
+  return evicted;
 }
 
 #ifdef __cplusplus
